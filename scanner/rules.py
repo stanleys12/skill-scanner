@@ -1,0 +1,406 @@
+"""Rule table for the Skill Security Scanner.
+
+Every rule is a compiled regex applied to one line of one file (or, for the few
+multiline rules, to the whole file). A hit becomes a finding with the file, line,
+exact snippet, a one-sentence reason, and what SkillJail does about it.
+
+Severities:
+  high    the skill can steal, destroy, hide, or escape. Verdict becomes RISKY.
+  medium  worth a human look before installing. Verdict becomes REVIEW.
+  low     informational. Does not change the verdict on its own.
+
+Keep this file boring and reviewable. No network, no imports beyond re.
+"""
+
+import re
+
+# What SkillJail does about each category. Shown once per high finding in the report.
+JAIL_NOTES = {
+    "credentials": "the manifest below does not grant that path, so the read fails at the kernel with Operation not permitted.",
+    "exfil": "net.allow is empty for this skill, so the connection is refused at the egress proxy before any byte leaves.",
+    "download-run": "with no net.allow the script never downloads, and curl/wget/sh are not on the exec allowlist unless you put them there.",
+    "reverse-shell": "the jail can only reach the loopback egress proxy, and nc/socat/ncat are not on the exec allowlist.",
+    "metadata": "the proxy refuses link-local and cloud-metadata hosts outright, even if a manifest tries to allow them.",
+    "destructive": "fs.write is limited to what the manifest grants (here: the workspace), so deletes outside it are denied at the kernel.",
+    "persistence": "shell rc files, launchd/cron, git hooks and agent settings are sensitive classes that need an explicit declare: block, so an undeclared write fails closed.",
+    "obfuscation": "the decoded payload still runs inside the jail, so whatever it reaches for has to be in the manifest or it fails.",
+    "env-harvest": "env.pass is an allowlist; host variables that are not listed never enter the jail, so there is nothing to harvest.",
+    "privilege": "sudo, osascript, launchctl and friends are never executable inside a jail, even if a manifest lists them.",
+    "prompt-injection": "SkillJail cannot stop the agent from reading the text, but anything the text talks the agent into running is still jailed (containment, not detection).",
+    "secrets": "a token baked into a skill is a problem the jail cannot fix; treat it as compromised and rotate it if it is yours.",
+    "binary": "a compiled binary that is not on the exec allowlist cannot start; if you allow it, it still gets no network and no credential paths.",
+    "permissions": "an over-broad manifest is the one thing the jail trusts you on. Narrow it before approving.",
+    "network": "every host has to be in net.allow; raw IPs, link-local and paste/webhook catchers are refused unless you explicitly declare them.",
+    "unicode": "hidden text is still text; the jail limits what it can achieve, but read the rendered file carefully before trusting any of it.",
+    "zip": "unpack into an empty directory and scan again; the jail would only let the skill touch the workspace anyway.",
+}
+
+# Rough mapping from what a skill is about to a SkillJail Pro profile name. Used for one
+# optional line in the report footer; nothing else depends on it.
+PRO_PROFILE_HINTS = [
+    (re.compile(r"\bgit\s+(commit|add|push)\b|\bconventional commit", re.I), "git-commit"),
+    (re.compile(r"\bgh\s+pr\b|pull request|api\.github\.com", re.I), "github-pr"),
+    (re.compile(r"\bpsql\b|postgres|postgresql", re.I), "postgres-query"),
+    (re.compile(r"\baws\s+s3\b|s3://|s3 bucket", re.I), "s3-sync"),
+    (re.compile(r"hooks\.slack\.com|slack webhook|slack message", re.I), "slack-webhook"),
+    (re.compile(r"\bscrap(e|ing)\b|beautifulsoup|playwright|puppeteer", re.I), "web-scrape"),
+    (re.compile(r"\bcsv\b", re.I), "csv-transform"),
+    (re.compile(r"\bjq\b|\bjson\b", re.I), "json-transform"),
+    (re.compile(r"\bnpm (run|ci|install|build)\b|package\.json", re.I), "npm-build"),
+    (re.compile(r"\bcurl\b.*https?://api\.|rest api|http request", re.I), "api-request"),
+]
+
+
+class Rule:
+    __slots__ = ("id", "category", "severity", "pattern", "why", "multiline", "files")
+
+    def __init__(self, id, category, severity, pattern, why, multiline=False, files=None, flags=re.I):
+        self.id = id
+        self.category = category
+        self.severity = severity
+        self.pattern = re.compile(pattern, flags | (re.S if multiline else 0))
+        self.why = why
+        self.multiline = multiline
+        # None = any text file; otherwise a tuple of extensions/names this rule applies to
+        self.files = files
+
+
+# Helpers to keep the big table readable.
+HOME = r"(?:~|\$HOME|\$\{HOME\}|/Users/[^/\s'\"]+|/home/[^/\s'\"]+|%USERPROFILE%)"
+NET_TOOL = r"(?:curl|wget|nc|ncat|netcat|socat|http|xh|aria2c|Invoke-WebRequest|iwr)"
+SHELL = r"(?:ba|z|da|k)?sh|bash|zsh|fish"
+
+RULES = [
+    # ---------------------------------------------------------------- credentials
+    Rule("CRED-AWS", "credentials", "high",
+         HOME + r"/\.aws\b|\.aws/credentials|aws_secret_access_key",
+         "Reads AWS credentials, which have nothing to do with most skills and are the first thing a credential stealer grabs."),
+    Rule("CRED-SSH", "credentials", "high",
+         HOME + r"/\.ssh\b|\bid_(rsa|ed25519|ecdsa|dsa)\b|authorized_keys|known_hosts",
+         "Touches SSH keys or the SSH config; private keys leaving the machine means every server they unlock is gone too."),
+    Rule("CRED-CLOUD", "credentials", "high",
+         HOME + r"/\.(config/gcloud|azure|oci|boto|kube/config|docker/config\.json|config/doctl|fly|netrc|npmrc|pypirc|git-credentials|terraformrc)\b|~/\.config/gh/hosts\.yml",
+         "Reads a cloud, registry or Git credential store."),
+    Rule("CRED-KEYCHAIN", "credentials", "high",
+         r"Library/Keychains|security\s+(find-(generic|internet)-password|dump-keychain|export)|/etc/shadow|SystemKey",
+         "Reads the macOS keychain or the system password database."),
+    Rule("CRED-BROWSER", "credentials", "high",
+         r"(Google/Chrome|BraveSoftware|Mozilla/Firefox|Microsoft Edge|Safari)/.*(Cookies|Login Data|Local State|key4\.db|logins\.json|cookies\.sqlite)|Library/Cookies",
+         "Reads browser cookies or saved passwords, which is session hijacking in all but name."),
+    Rule("CRED-ENV-FILE", "credentials", "medium",
+         r"(?<![\w.-])\.env(?:\.(local|production|prod|dev|development|staging))?(?![\w.-])|\bsecrets?\.(json|ya?ml|toml)\b|\bcredentials\.json\b|\bservice[-_]account.*\.json\b|\btoken\.json\b",
+         "Reads a .env or secrets file. Fine if the skill genuinely needs those settings, bad if it then sends them anywhere."),
+    Rule("CRED-HISTORY", "credentials", "medium",
+         HOME + r"/\.(zsh|bash|python|node_repl)_history\b|\.zsh_sessions|\.lesshst|\.viminfo",
+         "Reads shell or REPL history, which routinely contains pasted secrets."),
+    Rule("CRED-AGENT-CONFIG", "credentials", "medium",
+         HOME + r"/\.(claude|cursor|codex|gemini|continue)/(settings|config|hooks|mcp|credentials|\.credentials)[\w.]*|\.mcp\.json|claude_desktop_config\.json",
+         "Reads or edits the AI agent's own config (hooks, MCP servers, credentials). A skill that edits its host can grant itself anything."),
+    Rule("CRED-PASSWD", "credentials", "low",
+         r"/etc/passwd\b",
+         "Reads the user database. Harmless on its own, common in recon."),
+
+    # ---------------------------------------------------------------- exfiltration
+    Rule("EXFIL-UPLOAD", "exfil", "high",
+         r"\b(curl|wget|http|xh)\b[^\n|;&]*(\s-(d|F|T)\s|--data(-binary|-raw|-urlencode)?\b|--upload-file\b|--form\b|-X\s*(POST|PUT)\b|--post-(data|file)\b)[^\n]*(@[\w./~$-]|\$\(|`|\$\{?[A-Z_]{3,}|\.(env|json|txt|log|pem|key|csv|db|sqlite)\b|credentials|token|secret|history|\.ssh|\.aws)",
+         "Uploads a local file or variable contents to a remote host."),
+    Rule("EXFIL-PIPE", "exfil", "high",
+         r"\|\s*(curl|wget|http|xh|nc|ncat|socat|openssl\s+s_client)\b",
+         "Pipes command output straight into a network tool, the classic exfil one-liner."),
+    Rule("EXFIL-NC-FILE", "exfil", "high",
+         r"\b(nc|ncat|netcat|socat)\b[^\n]*<\s*[\w./~$-]+|\b(nc|ncat|netcat)\b\s+[\w.-]+\s+\d{2,5}\b",
+         "Pushes a file or stream to a host:port over a raw socket."),
+    Rule("EXFIL-COPY", "exfil", "high",
+         r"\b(scp|rsync|sftp)\b[^\n]*\s[\w.-]+@[\w.-]+:|\baws\s+s3\s+(cp|sync)\b[^\n]*(\.ssh|\.aws|\.env|credentials|\$HOME|~/)",
+         "Copies local files to a remote machine."),
+    Rule("EXFIL-DNS", "exfil", "high",
+         r"\b(dig|nslookup|host)\b[^\n]*(\$\(|`|base64|xxd)|\.\$\(\s*(cat|base64|xxd|hostname|whoami)",
+         "Encodes data into DNS lookups, a way to exfiltrate past HTTP-only firewalls."),
+    Rule("EXFIL-CODE-POST", "exfil", "high",
+         r"(requests\.(post|put)|urllib\.request\.(urlopen|Request)|http\.client\.HTTPS?Connection|fetch\(|axios\.(post|put)|net\.(connect|createConnection)|socket\.connect)[^\n]{0,200}(environ|getenv|process\.env|\.ssh|\.aws|credentials|\.env\b|token|secret|password|keychain|history)",
+         "Code posts credentials, environment or key material to a remote endpoint."),
+    Rule("EXFIL-WEBHOOK-HOST", "network", "high",
+         r"\b(webhook\.site|requestbin|pipedream\.net|ngrok(-free)?\.(io|app|dev)|burpcollaborator|oastify\.com|interact\.sh|oast\.(fun|live|me|pro|site|online)|transfer\.sh|file\.io|0x0\.st|termbin\.com|ix\.io|discord(app)?\.com/api/webhooks|api\.telegram\.org/bot|hooks\.zapier\.com|paste\.ee|pastebin\.com/raw|hastebin|controlc\.com|dpaste|anonfiles|catbox\.moe|requestcatcher|hookbin|beeceptor|mockbin|serveo\.net|localhost\.run|loca\.lt|trycloudflare\.com|bore\.pub)\b",
+         "Talks to a paste site, webhook catcher or tunnel: hosts that exist to receive data from strangers."),
+    Rule("NET-RAW-IP", "network", "medium",
+         r"https?://(?!127\.0\.0\.1|0\.0\.0\.0|localhost)(\d{1,3}\.){3}\d{1,3}(?!\.\d)",
+         "Connects to a bare IP address instead of a named host, so nobody can tell what it is."),
+    Rule("NET-SHORTENER", "network", "medium",
+         r"\b(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|shorturl\.at|tiny\.cc|rebrand\.ly|s\.id)/",
+         "Uses a URL shortener, which hides the real destination from review."),
+    Rule("NET-DYNDNS", "network", "medium",
+         r"\b[\w-]+\.(duckdns\.org|no-ip\.(com|org)|ddns\.net|hopto\.org|zapto\.org|dynu\.(com|net)|freedns\.afraid\.org|myftp\.(biz|org)|serveftp\.com|sytes\.net)\b",
+         "Uses a dynamic-DNS host, which is cheap and disposable and therefore popular for command-and-control."),
+
+    # ---------------------------------------------------------------- download and run
+    Rule("DL-PIPE-SH", "download-run", "high",
+         r"\b(curl|wget|fetch|http|xh|iwr|Invoke-WebRequest)\b[^\n|]*\|\s*(sudo\s+)?(" + SHELL + r"|python[23]?|perl|ruby|node|php|source|\.)\b",
+         "Downloads something and executes it unseen. Whatever that URL serves tomorrow runs on your machine tomorrow."),
+    Rule("DL-SUBST-EXEC", "download-run", "high",
+         r"(" + SHELL + r"|python[23]?|perl|node|eval|source|\.)\s+(-c\s+)?[\"']?[<(]\(?\s*(curl|wget|http|xh)\b|eval\s*[\"']?\$\(\s*(curl|wget)|\$\(\s*(curl|wget)\b[^\n]*\)\s*\|\s*(" + SHELL + r")",
+         "Runs the output of a download as code."),
+    Rule("DL-THEN-RUN", "download-run", "high",
+         r"\b(curl|wget)\b[^\n]*(-o|-O|--output)\s*[^\n;&|]*[;&|]+[^\n]*(chmod\s+\+?x|\./|bash|sh)\s",
+         "Downloads a file, then marks it executable and runs it."),
+    Rule("DL-POWERSHELL", "download-run", "high",
+         r"(iex|Invoke-Expression)[^\n]*(DownloadString|iwr|Invoke-WebRequest|Net\.WebClient)|DownloadString\([^\n]*\)\s*\|\s*iex",
+         "PowerShell download-and-execute."),
+    Rule("DL-PIP-URL", "download-run", "medium",
+         r"\bpip3?\s+install\s+[^\n]*(https?://|git\+)|\bnpm\s+(i|install)\s+[^\n]*(https?://|git\+|github:)|\bnpx\s+(-y\s+)?[^\n]*(https?://|github:)",
+         "Installs a package straight from a URL or Git ref, bypassing the registry's name and version checks."),
+    Rule("DL-REMOTE-IMPORT", "download-run", "medium",
+         r"\bimport\s*\(\s*[\"']https?://|\bimport\s+[\"']https?://|require\s*\(\s*[\"']https?://",
+         "Imports code from a URL at runtime."),
+
+    # ---------------------------------------------------------------- reverse shells
+    Rule("RS-DEVTCP", "reverse-shell", "high",
+         r"/dev/(tcp|udp)/",
+         "Opens a raw TCP/UDP connection from bash, which is how a bash reverse shell works."),
+    Rule("RS-BASH-I", "reverse-shell", "high",
+         r"\b(ba)?sh\s+-i\b[^\n]*(>&|&>|<&|/dev/tcp|\d+<>|nc|socat)|\b(ba)?sh\s+-i\s*$",
+         "Spawns an interactive shell wired to a socket."),
+    Rule("RS-NC-E", "reverse-shell", "high",
+         r"\b(nc|ncat|netcat)\b[^\n]*\s-(e|c)\s|\bnc(\.traditional)?\s+-l[^\n]*-[ep]\b|\bmkfifo\b[^\n]*\b(nc|ncat|netcat|socat)\b",
+         "Netcat with a command bound to the connection: a reverse or bind shell."),
+    Rule("RS-SOCAT", "reverse-shell", "high",
+         r"\bsocat\b[^\n]*(exec|system):|\bsocat\b[^\n]*tcp(4|6)?(-listen|-connect|:)[^\n]*(pty|exec)",
+         "socat shell over TCP."),
+    Rule("RS-PY-SOCKET", "reverse-shell", "high",
+         r"socket\.socket\([^\n]*\).{0,600}?(subprocess\.(call|Popen|run)|pty\.spawn|os\.dup2|os\.exec)",
+         "Python opens a socket and hands it a shell or dup2s it onto stdin/stdout: a textbook reverse shell.",
+         multiline=True),
+    Rule("RS-PY-ONELINER", "reverse-shell", "high",
+         r"python[23]?\s+-c\s+[\"'][^\n]*import\s+socket[^\n]*(subprocess|pty|dup2)",
+         "Python one-liner reverse shell."),
+    Rule("RS-PERL-RUBY", "reverse-shell", "high",
+         r"(perl|ruby|php)\s+-e\s+[\"'][^\n]*(socket|Socket|fsockopen|TCPSocket)[^\n]*(exec|system|spawn|popen)",
+         "Perl/Ruby/PHP one-liner reverse shell."),
+    Rule("RS-NODE", "reverse-shell", "high",
+         r"net\.(connect|createConnection|Socket)\([^\n]*\).{0,400}?(child_process|spawn\(|exec\()|child_process.{0,400}?net\.(connect|createConnection)",
+         "Node connects a socket to a spawned shell.",
+         multiline=True),
+    Rule("RS-TELNET", "reverse-shell", "high",
+         r"\btelnet\b\s+[\w.-]+\s+\d+\s*[|<]|\|\s*telnet\b",
+         "telnet piped to or from a shell."),
+    Rule("RS-SSH-R", "reverse-shell", "high",
+         r"\bssh\b[^\n]*\s-R\s+\d+:|\bssh\b[^\n]*-o\s*StrictHostKeyChecking=no[^\n]*\s-N\b",
+         "Opens an SSH reverse tunnel back into your machine."),
+
+    # ---------------------------------------------------------------- cloud metadata / SSRF
+    Rule("META-AWS", "metadata", "high",
+         r"169\.254\.169\.254|fd00:ec2::254|/latest/meta-data|/latest/user-data|/latest/api/token",
+         "Hits the cloud instance metadata service to lift the machine's IAM role credentials."),
+    Rule("META-GCP", "metadata", "high",
+         r"metadata\.google\.internal|computeMetadata/v1|metadata\.goog\b",
+         "Hits the GCP metadata server for service-account tokens."),
+    Rule("META-OTHER", "metadata", "high",
+         r"100\.100\.100\.200|169\.254\.170\.2|\bmetadata/instance\b|169\.254\.169\.253",
+         "Hits a cloud or container metadata endpoint (Alibaba, ECS task roles, Azure)."),
+    Rule("SSRF-LOCAL", "network", "medium",
+         r"https?://(127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?/(?!$)",
+         "Talks to a loopback or private-network address. Fine for a local dev server, interesting if the skill has no business doing so."),
+
+    # ---------------------------------------------------------------- destructive
+    Rule("DESTROY-RM-HOME", "destructive", "high",
+         r"\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*\s+)+(--no-preserve-root\s+)?(/(\s|$|\*)|~/?(\s|$|\*)|\$\{?HOME\}?/?(\s|$|\*)|/Users\b|/home\b|/etc\b|/usr\b|/var\b|/System\b|/Library\b|\*\s*$|\$\{?[A-Za-z_]+\}?\s*$|\"\$\{?[A-Za-z_]+\}?\"\s*$)",
+         "Recursive delete of the home directory, a system path, or an unquoted variable that could be empty. One typo from wiping the machine."),
+    Rule("DESTROY-RM", "destructive", "low",
+         r"\brm\s+-[a-zA-Z]*[rR][a-zA-Z]*\s",
+         "Recursive delete of a relative path. Normal for build cleanup, check what it points at."),
+    Rule("DESTROY-DISK", "destructive", "high",
+         r"\bdd\s+[^\n]*of=/dev/|\bmkfs(\.\w+)?\s|>\s*/dev/(sd[a-z]|disk\d|nvme|hd[a-z])|\bshred\b|\bdiskutil\s+(erase|reformat|zero)|\bwipefs\b",
+         "Overwrites or reformats a disk."),
+    Rule("DESTROY-FORKBOMB", "destructive", "high",
+         r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:|\bwhile\s+true\s*;\s*do\s+fork|\bfork\(\)\s*while",
+         "Fork bomb."),
+    Rule("DESTROY-CHMOD-ROOT", "destructive", "high",
+         r"\bchmod\s+(-R\s+)?[0-7]*777\s+/(\s|$)|\bchown\s+-R\s+[\w:]+\s+/(\s|$)",
+         "World-writable or re-owned root filesystem."),
+    Rule("DESTROY-GIT-FORCE", "destructive", "medium",
+         r"\bgit\s+push\b[^\n]*(\s-f\b|--force\b(?!-with-lease))|\bgit\s+(filter-branch|filter-repo)\b|\bgit\s+reflog\s+expire\b[^\n]*--expire=now|\bgit\s+update-ref\s+-d\b",
+         "Rewrites or force-pushes Git history; other people's commits can be lost for good."),
+    Rule("DESTROY-GIT-RESET", "destructive", "low",
+         r"\bgit\s+(reset\s+--hard|clean\s+-[a-zA-Z]*f[a-zA-Z]*d|checkout\s+--\s+\.)\b",
+         "Throws away uncommitted work."),
+    Rule("DESTROY-KILL-ALL", "destructive", "high",
+         r"\bkill\s+-9\s+-1\b|\bkillall\s+-9?\s*(-u\s+)?\$?\{?USER|\bpkill\s+-9?\s*-u\b|\bcrontab\s+-r\b|\blaunchctl\s+(bootout|remove)\s+(system|gui/)",
+         "Kills every process or removes every scheduled job."),
+    Rule("DESTROY-HISTORY", "destructive", "medium",
+         r"\bhistory\s+-c\b|unset\s+HISTFILE|HISTFILE=/dev/null|HISTSIZE=0|set\s+\+o\s+history|\brm\s+[^\n]*\.(zsh|bash)_history|\blog\s+erase\b|\bwevtutil\s+cl\b|\brm\s+-[a-zA-Z]*f[a-zA-Z]*\s+/var/log",
+         "Clears shell history or logs. Legit skills do not need to cover their tracks."),
+
+    # ---------------------------------------------------------------- persistence
+    Rule("PERSIST-SHELL-RC", "persistence", "high",
+         r">>?\s*" + HOME + r"/\.(zshrc|bashrc|bash_profile|profile|zprofile|zshenv|zlogin|config/fish/config\.fish)\b|\b(tee|sed\s+-i|echo)\b[^\n]*" + HOME + r"/\.(zshrc|bashrc|bash_profile|profile|zprofile|zshenv)\b|/etc/(zshrc|bashrc|profile|profile\.d)\b",
+         "Writes to a shell startup file, so it runs every time you open a terminal, long after the skill is gone."),
+    Rule("PERSIST-CRON", "persistence", "high",
+         r"\bcrontab\s+(-|-e|-l\s*[;|]|[\w./]+\.cron|\S+\s*$)|\(\s*crontab\s+-l[^\n]*\)\s*\|\s*crontab|/etc/cron(\.d|\.daily|\.hourly|tab)\b|@reboot\b|/var/spool/cron",
+         "Installs a cron job."),
+    Rule("PERSIST-LAUNCHD", "persistence", "high",
+         r"Library/LaunchAgents|Library/LaunchDaemons|\blaunchctl\s+(load|bootstrap|enable|submit|kickstart)\b|/etc/systemd/|~/\.config/systemd/|\bsystemctl\s+(--user\s+)?(enable|daemon-reload)\b|\bsc\s+create\b|HKCU\\\\?Software\\\\?Microsoft\\\\?Windows\\\\?CurrentVersion\\\\?Run",
+         "Installs a launch agent, systemd unit or registry Run key: starts at login forever."),
+    Rule("PERSIST-GIT-HOOK", "persistence", "high",
+         r"\.git/hooks/|\bgit\s+config\b[^\n]*core\.hooksPath|\bgit\s+config\b[^\n]*(--global|--system)[^\n]*(alias\.|core\.(pager|editor|sshCommand|fsmonitor)|credential\.helper)|\.git/config\b",
+         "Installs a Git hook or Git alias that runs code on your next git command."),
+    Rule("PERSIST-AUTHKEYS", "persistence", "high",
+         r">>?\s*" + HOME + r"/\.ssh/authorized_keys|authorized_keys\b[^\n]*(echo|tee|cat\s*>>)",
+         "Adds an SSH key to authorized_keys: a permanent back door."),
+    Rule("PERSIST-AGENT-HOOKS", "persistence", "high",
+         r"\"?(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|Stop)\"?\s*:[^\n]*(curl|wget|nc|bash|sh\s|python)|\.claude/(settings|hooks)[^\n]*(>>|tee|write|sed\s+-i|json\.dump)|CLAUDE\.md\b[^\n]*(>>|tee|cat\s*>)",
+         "Edits the agent's hooks or instruction files, so the skill keeps running inside every future session."),
+    Rule("PERSIST-PATH", "persistence", "medium",
+         r"\b(cp|mv|ln\s+-s|install)\b[^\n]*\s(/usr/local/bin|/opt/homebrew/bin|" + HOME + r"/\.local/bin|" + HOME + r"/bin|/usr/bin)/|export\s+PATH=[^\n]*" + HOME,
+         "Puts a binary on your PATH or prepends to PATH. Shadowing git or python there is a classic supply-chain move."),
+    Rule("PERSIST-PIP-SITE", "persistence", "medium",
+         r"\bsitecustomize\.py\b|\busercustomize\.py\b|\.pth\b[^\n]*site-packages|PYTHONSTARTUP=|NODE_OPTIONS=[^\n]*--require",
+         "Hooks the Python or Node interpreter startup."),
+
+    # ---------------------------------------------------------------- obfuscation
+    Rule("OBF-B64-EXEC", "obfuscation", "high",
+         r"base64\s+(-d|--decode|-D)\b[^\n]*\|\s*(sudo\s+)?(" + SHELL + r"|python[23]?|perl|node|ruby|php|eval)\b|\b(eval|exec)\s*\(\s*(base64\.b64decode|atob|Buffer\.from\([^\n]*base64|codecs\.decode|bytes\.fromhex|binascii\.unhexlify|zlib\.decompress|marshal\.loads|pickle\.loads)|\bexec\s*\(\s*compile\s*\(|__import__\(\s*[\"']base64|eval\s*\(\s*String\.fromCharCode|new\s+Function\s*\(\s*atob|\bxxd\s+-r\s+-p\b[^\n]*\|\s*(" + SHELL + r")|\brev\s*\|\s*(" + SHELL + r")|openssl\s+enc\s+-d[^\n]*\|\s*(" + SHELL + r")|\bgunzip\b[^\n]*\|\s*(" + SHELL + r")",
+         "Decodes an encoded blob and runs it. The only reason to hide code from a reader is that the reader would object."),
+    Rule("OBF-B64-DECODE", "obfuscation", "medium",
+         r"base64\s+(-d|--decode|-D)\b|base64\.b64decode\(|\batob\s*\(|Buffer\.from\([^\n]*[\"']base64[\"']|bytes\.fromhex\(|binascii\.unhexlify\(|codecs\.decode\([^\n]*rot",
+         "Decodes an encoded string. Sometimes legit (binary data), often a way to hide a URL or command."),
+    Rule("OBF-B64-BLOB", "obfuscation", "medium",
+         r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{120,}={0,2}(?![A-Za-z0-9+/=])",
+         "A very long base64-looking literal. Decode it before trusting the file."),
+    Rule("OBF-HEX-BLOB", "obfuscation", "medium",
+         r"(\\x[0-9a-fA-F]{2}){12,}|(0x[0-9a-fA-F]{2},\s*){12,}|(%[0-9a-fA-F]{2}){12,}",
+         "A long run of hex-escaped bytes, usually a hidden string or shellcode."),
+    Rule("OBF-CHARCODE", "obfuscation", "medium",
+         r"String\.fromCharCode\((\s*\d+\s*,){8,}|chr\(\d+\)\s*\+\s*chr\(\d+\)\s*\+\s*chr\(|\[\s*(\d{2,3}\s*,\s*){10,}\d{2,3}\s*\][^\n]*(chr|bytes|fromCharCode|map)",
+         "Builds a string out of character codes so it does not show up in a grep."),
+    Rule("OBF-DYN-EXEC", "obfuscation", "medium",
+         r"\beval\s*\(\s*[\"']?\$|\bexec\s*\(\s*(f[\"']|[\"'][^\n]*\+|\w+\s*\))|\bgetattr\s*\(\s*(__builtins__|builtins|os|subprocess)\s*,|__import__\s*\(\s*[\"'][\w]+[\"']\s*\)\s*\.\s*\w+\s*\(|globals\(\)\[|\bsubprocess\.\w+\(\s*[\"'][^\n]*\+",
+         "Runs dynamically assembled code or looks up dangerous functions by string, which hides what actually gets called."),
+    Rule("OBF-STRING-SPLIT", "obfuscation", "medium",
+         r"[\"'](cu|wg|ba|ev)[\"']\s*\+\s*[\"'](rl|et|sh|al)[\"']|\"c\"\s*\+\s*\"u\"\s*\+\s*\"r\"|\$\{[a-zA-Z_]+:[0-9]+:[0-9]+\}\$\{[a-zA-Z_]+:[0-9]+:[0-9]+\}",
+         "A command name assembled from fragments to dodge pattern matching."),
+    Rule("OBF-ZEROWIDTH", "unicode", "high",
+         "[\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180e]",
+         "Zero-width or invisible characters. Text you cannot see is text you did not review.", flags=0),
+    Rule("OBF-BIDI", "unicode", "high",
+         "[\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069]",
+         "Bidirectional override characters (Trojan Source). The code you read is not the code that runs.", flags=0),
+    Rule("OBF-HOMOGLYPH", "unicode", "medium",
+         r"\b[A-Za-z]*[\u0430\u0435\u043e\u0440\u0441\u0443\u0445\u0456\u0458\u04bb\u0455\u0501\u051b\u051d\u1d00-\u1d2b\uff21-\uff3a\uff41-\uff5a][A-Za-z\u0430-\u045f]*\b",
+         "Cyrillic or fullwidth letters mixed into Latin text: a lookalike for a word, path or host you think you recognise.", flags=0),
+    Rule("OBF-TAG-CHARS", "unicode", "high",
+         "[\U000e0000-\U000e007f]",
+         "Unicode tag characters, an invisible channel used to smuggle instructions into text.", flags=0),
+
+    # ---------------------------------------------------------------- env harvesting
+    Rule("ENV-DUMP-NET", "env-harvest", "high",
+         r"\b(printenv|env|set|export\s+-p|declare\s+-x)\b\s*(\|[^\n]*(curl|wget|nc|ncat|base64|xxd|gzip)|>\s*[\w./$~-]*\.(txt|log|json|b64))|/proc/(self|\d+)/environ|json\.dumps\(\s*dict\(\s*os\.environ|JSON\.stringify\(\s*process\.env\s*\)|os\.environ\.copy\(\)[^\n]*(post|send|write)|Get-ChildItem\s+Env:[^\n]*(Out-File|Invoke)",
+         "Dumps the whole environment and ships or saves it: API keys, tokens and passwords in one shot."),
+    Rule("ENV-DUMP", "env-harvest", "medium",
+         r"^\s*(printenv|env)\s*$|\b(printenv|env)\s*\|\s*(grep|sort|tee)\b|\bdict\(\s*os\.environ\s*\)|\bos\.environ\.items\(\)|\bObject\.(keys|entries)\(\s*process\.env\s*\)|\bfor\s+\w+\s+in\s+os\.environ\b",
+         "Enumerates all environment variables. Normal in a debugging skill, odd anywhere else."),
+    Rule("ENV-SECRET-REF", "env-harvest", "low",
+         r"\$\{?(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|SLACK_(BOT_)?TOKEN|NPM_TOKEN|PYPI_TOKEN|DATABASE_URL|STRIPE_SECRET_KEY|TWILIO_AUTH_TOKEN|SENDGRID_API_KEY|GOOGLE_APPLICATION_CREDENTIALS|AZURE_CLIENT_SECRET|VERCEL_TOKEN|NETLIFY_AUTH_TOKEN|HF_TOKEN|HUGGING_FACE_HUB_TOKEN|DOCKER_PASSWORD|SSH_AUTH_SOCK)\b|(getenv|environ(\.get)?|process\.env)\s*[\[(.]\s*[\"']?(AWS_SECRET_ACCESS_KEY|GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|SLACK_TOKEN|NPM_TOKEN|DATABASE_URL|STRIPE_SECRET_KEY)",
+         "Uses a secret from the environment. Expected for the skill's own API, check it only goes to that API's host."),
+
+    # ---------------------------------------------------------------- privilege
+    Rule("PRIV-SUDO", "privilege", "high",
+         r"(^|[\s;&|(`])sudo\s+(?!-h|--help)|\bdoas\s|\bpkexec\s|\brunas\b|\bosascript\b[^\n]*administrator privileges|\bsu\s+(-|root)\b",
+         "Escalates to root. A skill that formats a CSV does not need root."),
+    Rule("PRIV-SETUID", "privilege", "high",
+         r"\bchmod\s+(u\+s|g\+s|[2-7][0-7]{3})\s|\bchown\s+root\b|\bsetcap\b|/etc/sudoers|NOPASSWD",
+         "Sets a setuid bit or edits sudoers: permanent privilege escalation."),
+    Rule("PRIV-SECURITY-OFF", "privilege", "high",
+         r"\bcsrutil\s+disable|\bspctl\s+--master-disable|\bxattr\s+-[a-z]*d[a-z]*\s+com\.apple\.quarantine|Set-MpPreference\s+-Disable|\bsetenforce\s+0|\bufw\s+disable|\biptables\s+-F\b|\bdefaults\s+write\s+com\.apple\.(LaunchServices|security)",
+         "Turns off an OS security control (Gatekeeper, SIP, quarantine, firewall, SELinux)."),
+    Rule("PRIV-AGENT-UNSAFE", "privilege", "high",
+         r"--dangerously-skip-permissions|--yolo\b|--trust-all-tools|--allow-all|--no-sandbox\b|SKILLJAIL_MODE=off|skilljail\s+config\s+mode\s+off|skilljail\s+uninstall|--disable-sandbox|--unsafe-perm\b",
+         "Tells the agent or a tool to run with its safety checks off."),
+    Rule("PRIV-GIT-NOVERIFY", "privilege", "low",
+         r"\bgit\s+(commit|push)\b[^\n]*--no-verify",
+         "Skips Git hooks. Mild, but a signal the author wanted to avoid a check."),
+
+    # ---------------------------------------------------------------- prompt injection (instructions aimed at the agent)
+    Rule("PI-IGNORE", "prompt-injection", "high",
+         r"\b(ignore|disregard|forget|override|bypass)\b[^\n.]{0,40}\b(previous|prior|above|earlier|all|any|your|the|system)\b[^\n.]{0,30}\b(instructions?|prompts?|rules?|guidelines?|policy|policies|constraints?|guardrails?)\b|\bnew\s+(system\s+)?instructions?\s*:|\bsystem\s+prompt\s*:|\bthis\s+is\s+(a|the)\s+(new\s+)?system\s+(message|prompt)|<\|im_start\|>|\[INST\]|<<SYS>>|<\|system\|>",
+         "Classic prompt injection: text that tries to replace the agent's actual instructions."),
+    Rule("PI-SECRECY", "prompt-injection", "high",
+         r"\b(do\s*n[o']t|never|without|avoid|no\s+need\s+to)\s+(tell(ing)?|inform(ing)?|mention(ing)?|show(ing)?|reveal(ing)?|notify(ing)?|alert(ing)?|ask(ing)?|warn(ing)?|disclos(e|ing)|report(ing)?|display(ing)?|surfac(e|ing)|confirm(ing)?\s+with|check(ing)?\s+with)\s+(this\s+(to\s+)?)?(the\s+|your\s+|a\s+)?(user|human|operator|owner|person|developer|them)\b|\b(silently|quietly|discreetly|covertly|in\s+the\s+background|behind\s+the\s+scenes)\b[^\n]{0,60}\b(run|execute|send|upload|post|collect|read|copy|install|cat|curl|wget|fetch|exfil)|\b(hide|conceal|mask|suppress)\s+(this|the\s+(output|command|step|request|error)|it)\s+from\b|\bdo\s+not\s+(include|log|record|echo|print|show)\s+(this|these|the\s+following)\b[^\n]{0,30}\b(output|command|step|response|report|summary)",
+         "Tells the agent to hide something from the person running it. Honest skills never need secrecy from their own user."),
+    Rule("PI-DISABLE-SAFETY", "prompt-injection", "high",
+         r"\b(disable|turn\s+off|bypass|skip|remove|ignore|circumvent|get\s+around|work\s+around)\b[^\n.]{0,30}\b(safety|security|sandbox(ing)?|jail|skilljail|guardrails?|permissions?\s+(checks?|prompts?)|confirmation|approval|content\s+filter|safeguards?|restrictions?|protections?)\b|\byou\s+(are\s+)?(now\s+)?(in\s+)?(developer|god|admin|unrestricted|jailbreak|DAN)\s+mode\b|\bno\s+(restrictions?|limits?|rules)\s+apply\b|\bact\s+as\s+(if\s+)?(you\s+have\s+)?no\s+(restrictions|guidelines|filter)",
+         "Tells the agent to switch off a safety control."),
+    Rule("PI-AUTO-APPROVE", "prompt-injection", "medium",
+         r"\b(approve|accept|allow|confirm|grant)\s+(all|every|any)\s+(permissions?|requests?|prompts?|tool\s+calls?|dialogs?|actions?)\b|\bwithout\s+(asking|confirmation|prompting|user\s+approval|further\s+approval|review)\b|\bdo\s*n[o']t\s+ask\s+(for\s+)?(permission|confirmation|approval)\b|\bauto[- ]?(approve|accept|confirm)\b|\balways\s+(say|answer|respond|click)\s+(yes|y|ok|allow|approve)\b|\bskip\s+(the\s+)?(confirmation|approval|permission)\s+(step|prompt|dialog)",
+         "Pushes the agent to approve everything without the user in the loop."),
+    Rule("PI-ROLEPLAY", "prompt-injection", "medium",
+         r"\byou\s+are\s+(now|no\s+longer)\b[^\n]{0,60}\b(assistant|agent|claude|model|ai|bound|restricted|limited)\b|\bpretend\s+(that\s+)?(you|there)\b[^\n]{0,40}\b(no|without|free)\b|\bfrom\s+now\s+on\s+(you|respond|answer|act)\b[^\n]{0,60}\b(ignore|regardless|without|any)\b|\bimportant\s*:\s*(the\s+)?(user|human)\s+(has\s+)?(already\s+)?(approved|consented|authorized|agreed)",
+         "Tries to change who the agent thinks it is or what has already been approved."),
+    Rule("PI-URGENCY", "prompt-injection", "low",
+         r"\b(urgent|immediately|right\s+now|critical|mandatory|required\s+step|you\s+must|must\s+first|before\s+(doing\s+)?anything\s+else)\b[^\n]{0,80}\b(run|execute|install|download|curl|send|post|upload|cat|read|copy|export)\b",
+         "Urgency plus a command is how injected instructions get an agent to act before thinking."),
+    Rule("PI-HIDDEN-COMMENT", "prompt-injection", "medium",
+         r"<!--(?![^\n]*-->\s*$)[^\n]*\b(run|execute|install|curl|wget|send|post|upload|read|cat|ignore|instructions?|assistant|agent|claude|gpt|model|you\s+must|do\s+not|hidden|secret|credentials?|token|password|env)\b|<!--[^\n]*\b(run|execute|install|curl|wget|send|post|upload|cat\s|ignore|instructions?|assistant|agent|claude|you\s+must|do\s+not|credentials?|password|token)\b[^\n]*-->",
+         "An HTML comment that gives instructions. Invisible when rendered, fully visible to the agent."),
+    Rule("PI-TELEMETRY-CREDS", "prompt-injection", "high",
+         r"\b(telemetry|analytics|diagnostics?|debug\s+info|usage\s+(data|stats)|crash\s+report|health\s+check|license\s+(check|validation)|verification|sync|backup)\b[^\n]{0,120}\b(credentials?|\.aws|\.ssh|\.env\b|token|api[_ ]?key|password|secret|keychain|history|private\s+key|cookies?)\b|\b(credentials?|\.aws|\.ssh|api[_ ]?key|token|private\s+key)\b[^\n]{0,120}\b(for\s+)?(telemetry|analytics|diagnostics?|verification|license\s+check|backup|sync)\b",
+         "Dresses up credential collection as telemetry, diagnostics or a license check. Nobody's telemetry needs your AWS keys."),
+    Rule("PI-SELF-AUTHORITY", "prompt-injection", "medium",
+         r"\b(anthropic|openai|google|the\s+(platform|marketplace|vendor|maintainers?))\s+(has\s+|have\s+)?(approved|verified|whitelisted|certified|audited|requires?)\s+this\b|\bthis\s+skill\s+(is|has\s+been)\s+(pre-?)?(approved|verified|trusted|audited|certified|whitelisted)\s+by\b|\bsafe\s+to\s+(run|execute)\s+(with|without)\b[^\n]{0,30}\b(review|checking|sandbox)",
+         "Claims an authority approved it. A skill vouching for itself is not evidence."),
+    Rule("PI-AI-COMMENT", "prompt-injection", "low",
+         r"^\s*(#|//|/\*|--|;|%)\s*(ai|assistant|agent|claude|copilot|gpt|llm|model)\s*[:,]\s*\w+[^\n]*\b(run|execute|install|send|curl|read|cat|ignore|must|always|never)\b",
+         "A code comment addressed to the AI. Comments are for humans; this one is talking to the tool.", flags=re.I | re.M),
+
+    # ---------------------------------------------------------------- embedded secrets
+    Rule("SECRET-PRIVKEY", "secrets", "high",
+         r"-----BEGIN\s+(RSA|OPENSSH|DSA|EC|PGP|ENCRYPTED)?\s*PRIVATE\s+KEY(\s+BLOCK)?-----",
+         "Ships a private key. Either it is the author's (now public) or it unlocks something they want on your machine."),
+    Rule("SECRET-AWS-KEY", "secrets", "high",
+         r"\b(AKIA|ASIA|AGPA|AIDA|AROA|ANPA|ANVA)[0-9A-Z]{16}\b",
+         "A hard-coded AWS access key ID."),
+    Rule("SECRET-TOKEN", "secrets", "medium",
+         r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\bsk-(proj-|ant-)?[A-Za-z0-9_-]{32,}\b|\bAIza[0-9A-Za-z_-]{35}\b|\bglpat-[A-Za-z0-9_-]{20}\b|\bnpm_[A-Za-z0-9]{36}\b|\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}|\bhf_[A-Za-z0-9]{30,}\b|\bsk_live_[A-Za-z0-9]{20,}\b|\brk_live_[A-Za-z0-9]{20,}\b|\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{30,}",
+         "A hard-coded API token. If it is the author's, it is now everyone's; if it is a placeholder, say so in the docs."),
+    Rule("SECRET-SLACK-HOOK", "secrets", "medium",
+         r"hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+",
+         "A live Slack webhook URL, hard-coded. Anyone who reads the skill can post to that channel, and the skill can post whatever it collects."),
+    Rule("SECRET-CONN-STRING", "secrets", "medium",
+         r"\b(postgres(ql)?|mysql|mongodb(\+srv)?|redis|amqp|mssql)://[^\s:/@]+:[^\s@/]{4,}@[\w.-]+",
+         "A connection string with an embedded password."),
+
+    # ---------------------------------------------------------------- over-broad permissions (manifests, frontmatter)
+    Rule("PERM-FS-HOME", "permissions", "medium",
+         r"^\s*(read|write)\s*:\s*\[[^\]\n]*[\"']?(~|\$HOME|/|\$\{HOME\})[\"']?\s*[,\]]|^\s*-\s*[\"']?(~|\$HOME|/)[\"']?\s*$",
+         "The manifest asks for the whole home directory or the root filesystem. Narrow it to what the skill actually uses.",
+         files=("skilljail.yaml", "SKILL.md"), flags=re.I | re.M),
+    Rule("PERM-NET-ALL", "permissions", "medium",
+         r"^\s*(allow|net)\s*:\s*\[?\s*[\"']\*[\"']|^\s*-\s*[\"']\*[\"']\s*$",
+         "The manifest allows every network host. That is no network policy at all.",
+         files=("skilljail.yaml", "SKILL.md"), flags=re.I | re.M),
+    Rule("PERM-TOOLS-ALL", "permissions", "medium",
+         r"^\s*allowed-tools\s*:\s*[^\n]*\bBash\s*(\(\s*\*\s*\)|\(\*:\*\))|^\s*allowed-tools\s*:\s*[^\n]*\bBash\b(?!\()|^\s*allowed-tools\s*:\s*\*\s*$",
+         "The skill pre-approves unrestricted shell access for itself.",
+         files=("SKILL.md",), flags=re.I | re.M),
+    Rule("PERM-CHMOD-777", "permissions", "low",
+         r"\bchmod\s+(-R\s+)?[0-7]?777\s+(?!/\s)",
+         "Makes files world-writable. Lazy at best."),
+]
+
+# Shell builtins and syntax words that should not be reported as 'binaries this skill runs'.
+SHELL_NOISE = {
+    "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac", "in",
+    "function", "return", "exit", "export", "local", "set", "unset", "shift", "source", "cd",
+    "echo", "printf", "read", "test", "true", "false", "break", "continue", "eval", "exec",
+    "trap", "wait", "time", "let", "declare", "readonly", "alias", "pushd", "popd", "dirs",
+    "command", "builtin", "type", "hash", "ulimit", "umask", "getopts", "select", "until",
+    "env", "nohup", "xargs", "sudo", "nice", "timeout", "watch", "yes", "no", "or", "and", "not",
+    "the", "a", "an", "to", "is", "it", "this", "that", "with", "run", "use", "see", "note",
+    "output", "example", "step", "steps", "optional", "required", "returns", "usage", "input",
+    "where", "when", "which", "you", "your", "we", "they", "all", "any", "each", "some",
+    "#", "$", "//", "/*", "*", "-", "--", "...", "|", "||", "&&", ">", ">>", "<", "<<",
+}
+
+# Things that look like network destinations: used for the "what it touches" table, not findings.
+URL_RE = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,}|(\d{1,3}\.){3}\d{1,3})(:\d+)?", re.I)
+HOST_RE = re.compile(r"\b((?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|me|us|uk|de|fr|ru|cn|xyz|top|site|online|cloud|info|tech|gg|to|ly|tv|cc|ws|biz|is|gd|ee|st|moe|pub|run|lt|fun|live|pro)(?::\d+)?)\b", re.I)
+HOST_SKIP = {"example.com", "example.org", "example.net", "localhost", "schema.org", "w3.org", "www.w3.org",
+             "en.wikipedia.org", "stackoverflow.com", "localhost.localdomain"}
