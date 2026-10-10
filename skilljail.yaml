@@ -1,0 +1,22 @@
+# SkillJail manifest for the Skill Security Scanner itself.
+#
+# This is the trust story: the scanner is jailed by the same tool it recommends.
+# Read-only, no network, no env passthrough. It can read the workspace (where you
+# put the skill you want scanned) and ~/Downloads (where skill zips tend to land),
+# and nothing else. It cannot write anywhere except its private per-run $TMP, which
+# is where a .zip target gets unpacked. scripts/verify.sh proves every line of this.
+permissions:
+  version: 1
+  fs:
+    read: ["$WORKSPACE", "~/Downloads"]
+    write: []
+  net:
+    allow: []
+  exec:
+    # python3 runs the analyzer. skilljail is only used for `skilljail infer` (manifest
+    # drafting); it is a script inside the same Python tree. The coreutils are for the
+    # usage examples in SKILL.md (ls, cat, unzip -l) and for scripts/verify.sh.
+    allow: ["python3", "skilljail", "ls", "cat", "head", "wc", "find", "unzip"]
+    shell: true
+  env:
+    pass: []
