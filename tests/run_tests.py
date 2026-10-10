@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Assert the scanner's verdicts and findings on the sample skills in tests/skills/.
+
+Pure stdlib, no network. Run: python3 tests/run_tests.py  (or via scripts/verify.sh).
+Exit 0 only if every sample matches tests/expected.json.
+"""
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+SCAN = os.path.join(ROOT, "scanner", "scan.py")
+
+
+def scan(skill_dir):
+    proc = subprocess.run([sys.executable, "-I", SCAN, skill_dir, "--no-infer", "--json"],
+                          capture_output=True, text=True, timeout=60)
+    if proc.returncode not in (0, 1):
+        raise SystemExit(f"scan.py failed on {skill_dir} (exit {proc.returncode}):\n{proc.stderr}")
+    return json.loads(proc.stdout)
+
+
+def check(name, spec):
+    d = scan(os.path.join(HERE, "skills", name))
+    rules = {f["rule"] for f in d["findings"]}
+    sevs = {f["severity"] for f in d["findings"]}
+    errs = []
+    if d["verdict"] != spec["verdict"]:
+        errs.append(f"verdict {d['verdict']!r}, expected {spec['verdict']!r}")
+    for r in spec.get("must_have_rules", []):
+        if r not in rules:
+            errs.append(f"missing expected finding {r}")
+    for s in spec.get("must_not", []):
+        if s in sevs:
+            errs.append(f"has a {s}-severity finding it should not")
+    for h in spec.get("must_contact", []):
+        if h not in d["touches"]["hosts_contacted"]:
+            errs.append(f"did not record contact with {h}")
+    return d["verdict"], errs
+
+
+def main():
+    expected = json.load(open(os.path.join(HERE, "expected.json")))
+    fails = 0
+    for name, spec in expected.items():
+        try:
+            verdict, errs = check(name, spec)
+        except Exception as e:  # noqa: BLE001
+            print(f"[FAIL] {name}: {e}")
+            fails += 1
+            continue
+        if errs:
+            fails += 1
+            print(f"[FAIL] {name} ({verdict})")
+            for e in errs:
+                print(f"         - {e}")
+        else:
+            print(f"[ok]   {name}: {verdict}")
+
+    # Determinism: scanning twice gives the same verdict + findings.
+    a = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
+    b = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
+    if (a["verdict"], sorted((f["rule"], f["file"], f["line"]) for f in a["findings"])) != \
+       (b["verdict"], sorted((f["rule"], f["file"], f["line"]) for f in b["findings"])):
+        fails += 1
+        print("[FAIL] determinism: two scans of the same skill disagreed")
+    else:
+        print("[ok]   determinism: repeated scan is identical")
+
+    print()
+    print("ALL TESTS PASS" if fails == 0 else f"{fails} TEST(S) FAILED")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,7 @@
+{
+  "clean-csv-summary":        {"verdict": "SAFE",   "must_not": ["high", "medium"]},
+  "clean-release-notes":      {"verdict": "SAFE",   "must_contact": ["api.github.com"]},
+  "borderline-deploy-helper": {"verdict": "REVIEW", "must_have_rules": ["DL-PIP-URL"]},
+  "malicious-telemetry":      {"verdict": "RISKY",  "must_have_rules": ["CRED-AWS", "EXFIL-PIPE", "PI-TELEMETRY-CREDS", "PI-SECRECY"]},
+  "malicious-backdoor":       {"verdict": "RISKY",  "must_have_rules": ["DL-PIPE-SH", "RS-DEVTCP", "PERSIST-LAUNCHD", "PERSIST-SHELL-RC", "PI-IGNORE", "PI-DISABLE-SAFETY"]}
+}
