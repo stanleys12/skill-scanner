@@ -81,6 +81,22 @@ def main():
     else:
         print("[ok]   determinism: repeated scan is identical")
 
+    # SARIF: --sarif output parses as JSON and carries one result per finding.
+    proc = subprocess.run([sys.executable, "-I", SCAN, os.path.join(HERE, "skills", "malicious-backdoor"), "--no-infer", "--sarif"],
+                          capture_output=True, text=True, timeout=60)
+    try:
+        sarif = json.loads(proc.stdout)
+        results = sarif["runs"][0]["results"]
+        ok = sarif["version"] == "2.1.0" and len(results) == len(a["findings"]) and all(
+            r["ruleId"] and r["level"] in ("error", "warning", "note") for r in results)
+    except (ValueError, KeyError, IndexError):
+        ok = False
+    if ok:
+        print("[ok]   sarif: valid JSON, one result per finding")
+    else:
+        fails += 1
+        print("[FAIL] sarif: --sarif output is not a valid minimal SARIF 2.1.0 log")
+
     print()
     print("ALL TESTS PASS" if fails == 0 else f"{fails} TEST(S) FAILED")
     return 1 if fails else 0
