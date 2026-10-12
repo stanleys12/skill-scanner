@@ -186,6 +186,9 @@ RULES = [
     Rule("RS-SSH-R", "reverse-shell", "high",
          r"\bssh\b[^\n]*\s-R\s+\d+:|\bssh\b[^\n]*-o\s*StrictHostKeyChecking=no[^\n]*\s-N\b",
          "Opens an SSH reverse tunnel back into your machine."),
+    Rule("RS-TUNNEL-BIN", "reverse-shell", "high",
+         r"\bngrok\s+(http|tcp|tls)\b|\bcloudflared\s+tunnel\b|\blt\s+--port\b|\bbore\s+local\b",
+         "Runs a tunnel client (ngrok, cloudflared, localtunnel, bore) that exposes a local port to the internet."),
 
     # ---------------------------------------------------------------- cloud metadata / SSRF
     Rule("META-AWS", "metadata", "high",
