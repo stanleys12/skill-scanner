@@ -59,6 +59,18 @@ def main():
         else:
             print(f"[ok]   {name}: {verdict}")
 
+    # Rule integrity: every rule id is unique. A duplicate id would silently shadow a finding
+    # in any set keyed by rule (the scanner and this harness both key findings by rule id).
+    sys.path.insert(0, ROOT)
+    from scanner.rules import RULES
+    ids = [r.id for r in RULES]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        fails += 1
+        print(f"[FAIL] rule integrity: duplicate rule id(s): {', '.join(dupes)}")
+    else:
+        print(f"[ok]   rule integrity: {len(ids)} rules, all ids unique")
+
     # Determinism: scanning twice gives the same verdict + findings.
     a = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
     b = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
