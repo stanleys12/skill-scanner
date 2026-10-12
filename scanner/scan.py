@@ -2,7 +2,7 @@
 """Skill Security Scanner: deterministic, read-only, offline analysis of an agent skill.
 
 Usage:
-    python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json] [--no-infer] [--fail-on review|risky]
+    python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json | --sarif] [--no-infer] [--fail-on review|risky]
 
 Reads every file in the target skill, applies the rules in rules.py, and prints a
 Markdown report (or JSON) with a verdict, findings with file:line and snippet, what the
@@ -637,10 +637,30 @@ def render_markdown(sc, verdict, reason, manifest_text, manifest_source, target)
     return "\n".join(L)
 
 
+def render_sarif(sc, target):
+    """Minimal SARIF 2.1.0 log: one result per finding (ruleId, level from severity, file + line)."""
+    level = {"high": "error", "medium": "warning", "low": "note"}
+    rules = {}
+    for f in sc.findings:
+        rules.setdefault(f["rule"], {"id": f["rule"], "shortDescription": {"text": f["why"]}})
+    results = []
+    for f in sorted(sc.findings, key=lambda f: (SEV_ORDER[f["severity"]], f["file"], f["line"])):
+        loc = {"artifactLocation": {"uri": f["file"]}}
+        if f["line"] > 0:
+            loc["region"] = {"startLine": f["line"]}
+        results.append({"ruleId": f["rule"], "level": level[f["severity"]],
+                        "message": {"text": f["why"]}, "locations": [{"physicalLocation": loc}]})
+    return {"$schema": "https://json.schemastore.org/sarif-2.1.0.json", "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "skill-scanner", "version": VERSION,
+                                          "informationUri": SKILLJAIL_URL, "rules": list(rules.values())}},
+                      "results": results}]}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="scan.py", description="Read-only, offline security scan of an agent skill.")
     ap.add_argument("target", nargs="?", help="skill directory, SKILL.md path, or .zip")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of Markdown")
+    ap.add_argument("--sarif", action="store_true", help="emit a SARIF 2.1.0 report of the findings instead of Markdown")
     ap.add_argument("--no-infer", action="store_true", help="do not shell out to `skilljail infer`; always use the built-in manifest draft")
     ap.add_argument("--fail-on", choices=["review", "risky"], help="exit 1 if the verdict is at or above this level")
     ap.add_argument("--list-rules", action="store_true", help="list every detection rule (id, category, severity) and exit")
@@ -676,7 +696,9 @@ def main(argv=None):
         if manifest is None:
             manifest = sc.draft_manifest()
         manifest_text, manifest_source = manifest
-        if args.json:
+        if args.sarif:
+            print(json.dumps(render_sarif(sc, args.target), indent=2, ensure_ascii=False))
+        elif args.json:
             out = {
                 "version": VERSION, "target": args.target, "verdict": verdict, "reason": reason,
                 "counts": {s: sum(1 for f in sc.findings if f["severity"] == s) for s in ("high", "medium", "low")},
