@@ -2,7 +2,7 @@
 """Skill Security Scanner: deterministic, read-only, offline analysis of an agent skill.
 
 Usage:
-    python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json | --sarif] [--no-infer] [--fail-on review|risky]
+    python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json | --sarif] [--no-infer] [--quiet] [--fail-on review|risky]
 
 Reads every file in the target skill, applies the rules in rules.py, and prints a
 Markdown report (or JSON) with a verdict, findings with file:line and snippet, what the
@@ -662,6 +662,7 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true", help="emit JSON instead of Markdown")
     ap.add_argument("--sarif", action="store_true", help="emit a SARIF 2.1.0 report of the findings instead of Markdown")
     ap.add_argument("--no-infer", action="store_true", help="do not shell out to `skilljail infer`; always use the built-in manifest draft")
+    ap.add_argument("--quiet", action="store_true", help="print only the one-line verdict (exit codes still apply)")
     ap.add_argument("--fail-on", choices=["review", "risky"], help="exit 1 if the verdict is at or above this level")
     ap.add_argument("--list-rules", action="store_true", help="list every detection rule (id, category, severity) and exit")
     ap.add_argument("--version", action="version", version=f"skill-scanner {VERSION}")
@@ -696,7 +697,9 @@ def main(argv=None):
         if manifest is None:
             manifest = sc.draft_manifest()
         manifest_text, manifest_source = manifest
-        if args.sarif:
+        if args.quiet:
+            print(f"VERDICT: {verdict}. {reason}")
+        elif args.sarif:
             print(json.dumps(render_sarif(sc, args.target), indent=2, ensure_ascii=False))
         elif args.json:
             out = {
