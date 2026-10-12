@@ -9,5 +9,6 @@
   "malicious-ps-encoded":     {"verdict": "RISKY",  "must_have_rules": ["OBF-PS-ENCODED"]},
   "malicious-autorun":        {"verdict": "RISKY",  "must_have_rules": ["PERSIST-SYSTEMD-USER", "PERSIST-AUTOSTART", "PERSIST-VSCODE-AUTORUN", "PERSIST-NPM-POSTINSTALL", "PERSIST-PIP-SITE"]},
   "malicious-tunnel":         {"verdict": "RISKY",  "must_have_rules": ["RS-TUNNEL-BIN"]},
-  "malicious-dns-hijack":     {"verdict": "RISKY",  "must_have_rules": ["NET-HOSTS-WRITE", "NET-DNS-CHANGE"]}
+  "malicious-dns-hijack":     {"verdict": "RISKY",  "must_have_rules": ["NET-HOSTS-WRITE", "NET-DNS-CHANGE"]},
+  "malicious-metadata":       {"verdict": "RISKY",  "must_have_rules": ["META-GCP", "META-OTHER"]}
 }
