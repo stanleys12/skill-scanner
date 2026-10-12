@@ -255,6 +255,18 @@ RULES = [
     Rule("PERSIST-PIP-SITE", "persistence", "medium",
          r"\bsitecustomize\.py\b|\busercustomize\.py\b|\.pth\b[^\n]*site-packages|PYTHONSTARTUP=|NODE_OPTIONS=[^\n]*--require",
          "Hooks the Python or Node interpreter startup."),
+    Rule("PERSIST-SYSTEMD-USER", "persistence", "high",
+         r"\.config/systemd/user/[^\s'\"]*\.(service|timer)\b|\bsystemctl\s+--user\s+(enable|start)\b",
+         "Writes a systemd user unit: it starts at login without root and survives the skill."),
+    Rule("PERSIST-AUTOSTART", "persistence", "high",
+         r"\.config/autostart/[^\s'\"]*\.desktop\b",
+         "Drops a .desktop file in the autostart folder, so it launches at every desktop login."),
+    Rule("PERSIST-VSCODE-AUTORUN", "persistence", "high",
+         r"\"runOn\"\s*:\s*\"folderOpen\"|\"task\.allowAutomaticTasks\"\s*:\s*\"on\"|\.vscode/(tasks|settings)\.json\b[^\n]*(>>?|tee|write|sed\s+-i|json\.dump)",
+         "Makes VS Code run a task the moment the folder is opened, with no click from you."),
+    Rule("PERSIST-NPM-POSTINSTALL", "persistence", "medium",
+         r"\"(pre|post)?install\"\s*:\s*\"[^\"\n]*(curl|wget|node\s|bash|sh\s|python|powershell|eval)|npm\s+pkg\s+set\s+scripts\.(pre|post)?install",
+         "Adds an npm install script, which runs code on every npm install of this package."),
 
     # ---------------------------------------------------------------- obfuscation
     Rule("OBF-B64-EXEC", "obfuscation", "high",

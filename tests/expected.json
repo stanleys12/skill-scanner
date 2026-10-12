@@ -6,5 +6,6 @@
   "malicious-backdoor":       {"verdict": "RISKY",  "must_have_rules": ["DL-PIPE-SH", "RS-DEVTCP", "PERSIST-LAUNCHD", "PERSIST-SHELL-RC", "PI-IGNORE", "PI-DISABLE-SAFETY"]},
   "malicious-screengrab":     {"verdict": "RISKY",  "must_have_rules": ["CAPTURE-CLIPBOARD", "CAPTURE-SCREEN", "EXFIL-UPLOAD"]},
   "malicious-packed-loader":  {"verdict": "RISKY",  "must_have_rules": ["OBF-B64-EXEC", "OBF-PIPE-EXEC"]},
-  "malicious-ps-encoded":     {"verdict": "RISKY",  "must_have_rules": ["OBF-PS-ENCODED"]}
+  "malicious-ps-encoded":     {"verdict": "RISKY",  "must_have_rules": ["OBF-PS-ENCODED"]},
+  "malicious-autorun":        {"verdict": "RISKY",  "must_have_rules": ["PERSIST-SYSTEMD-USER", "PERSIST-AUTOSTART", "PERSIST-VSCODE-AUTORUN", "PERSIST-NPM-POSTINSTALL", "PERSIST-PIP-SITE"]}
 }
