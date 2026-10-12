@@ -71,6 +71,19 @@ def main():
     else:
         print(f"[ok]   rule integrity: {len(ids)} rules, all ids unique")
 
+    # Docs: docs/RULES.md is generated from RULES; regenerate with scripts/gen_rules_doc.py.
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from gen_rules_doc import render
+    try:
+        in_sync = open(os.path.join(ROOT, "docs", "RULES.md"), encoding="utf-8").read() == render()
+    except OSError:
+        in_sync = False
+    if in_sync:
+        print("[ok]   docs: docs/RULES.md matches RULES")
+    else:
+        fails += 1
+        print("[FAIL] docs: docs/RULES.md is out of sync; run python3 scripts/gen_rules_doc.py")
+
     # Determinism: scanning twice gives the same verdict + findings.
     a = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
     b = scan(os.path.join(HERE, "skills", "malicious-backdoor"))
