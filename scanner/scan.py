@@ -637,12 +637,28 @@ def render_markdown(sc, verdict, reason, manifest_text, manifest_source, target)
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="scan.py", description="Read-only, offline security scan of an agent skill.")
-    ap.add_argument("target", help="skill directory, SKILL.md path, or .zip")
+    ap.add_argument("target", nargs="?", help="skill directory, SKILL.md path, or .zip")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of Markdown")
     ap.add_argument("--no-infer", action="store_true", help="do not shell out to `skilljail infer`; always use the built-in manifest draft")
     ap.add_argument("--fail-on", choices=["review", "risky"], help="exit 1 if the verdict is at or above this level")
+    ap.add_argument("--list-rules", action="store_true", help="list every detection rule (id, category, severity) and exit")
     ap.add_argument("--version", action="version", version=f"skill-scanner {VERSION}")
     args = ap.parse_args(argv)
+
+    if args.list_rules:
+        rows = sorted(R.RULES, key=lambda r: (SEV_ORDER[r.severity], r.category, r.id))
+        if args.json:
+            print(json.dumps([{"id": r.id, "category": r.category, "severity": r.severity, "why": r.why}
+                              for r in rows], indent=2, ensure_ascii=False))
+        else:
+            width = max((len(r.id) for r in rows), default=0)
+            for r in rows:
+                print(f"{r.id:<{width}}  {r.severity:<6}  {r.category:<16}  {r.why}")
+            print(f"\n{len(rows)} rules.")
+        return 0
+
+    if not args.target:
+        ap.error("the following arguments are required: target (or use --list-rules / --version)")
 
     scratch = tempfile.mkdtemp(prefix="skill-scan-")
     try:
