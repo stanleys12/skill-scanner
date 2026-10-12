@@ -66,7 +66,7 @@ class Rule:
         self.files = files
 
 
-# Helpers to keep the big table readable.
+# Shared regex fragments (home dirs, network tools, shells) that keep the big table readable.
 HOME = r"(?:~|\$HOME|\$\{HOME\}|/Users/[^/\s'\"]+|/home/[^/\s'\"]+|%USERPROFILE%)"
 NET_TOOL = r"(?:curl|wget|nc|ncat|netcat|socat|http|xh|aria2c|Invoke-WebRequest|iwr)"
 SHELL = r"(?:ba|z|da|k)?sh|bash|zsh|fish"
