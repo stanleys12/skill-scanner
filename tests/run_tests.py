@@ -97,6 +97,16 @@ def main():
         fails += 1
         print("[FAIL] sarif: --sarif output is not a valid minimal SARIF 2.1.0 log")
 
+    # --quiet: a single verdict line, and --fail-on still sets the exit code.
+    proc = subprocess.run([sys.executable, "-I", SCAN, os.path.join(HERE, "skills", "malicious-backdoor"), "--no-infer", "--quiet", "--fail-on", "review"],
+                          capture_output=True, text=True, timeout=60)
+    lines = proc.stdout.strip().splitlines()
+    if len(lines) == 1 and lines[0].startswith("VERDICT: ") and proc.returncode == 1:
+        print("[ok]   quiet: one verdict line, --fail-on exit code kept")
+    else:
+        fails += 1
+        print("[FAIL] quiet: --quiet should print one verdict line and still exit 1 on --fail-on")
+
     print()
     print("ALL TESTS PASS" if fails == 0 else f"{fails} TEST(S) FAILED")
     return 1 if fails else 0

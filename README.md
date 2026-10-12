@@ -20,12 +20,19 @@ python3 scanner/scan.py <target> --json                         # machine-readab
 python3 scanner/scan.py <target> --sarif                        # SARIF 2.1.0 (code scanning)
 python3 scanner/scan.py <target> --no-infer                     # don't call `skilljail infer`
 python3 scanner/scan.py <target> --fail-on review               # exit 1 for REVIEW or RISKY (CI)
+python3 scanner/scan.py <target> --quiet                        # only the one-line verdict
 ```
 
 You get a one-line verdict (SAFE / REVIEW / RISKY), a "what it says vs. what it touches" table,
 findings grouped by severity with file:line and the exact snippet, a note on what SkillJail does
 about each high finding, and a suggested `skilljail.yaml`. No install, no dependencies: it's
 stdlib Python 3.11+.
+
+### Exit codes
+
+- `0`: scan finished and no `--fail-on` threshold was hit
+- `1`: the verdict is at or above the `--fail-on` level
+- `3`: target error (missing path, unreadable or invalid input)
 
 ## What it catches
 
