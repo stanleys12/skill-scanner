@@ -270,6 +270,12 @@ RULES = [
     Rule("PERSIST-NPM-POSTINSTALL", "persistence", "medium",
          r"\"(pre|post)?install\"\s*:\s*\"[^\"\n]*(curl|wget|node\s|bash|sh\s|python|powershell|eval)|npm\s+pkg\s+set\s+scripts\.(pre|post)?install",
          "Adds an npm install script, which runs code on every npm install of this package."),
+    Rule("NET-HOSTS-WRITE", "persistence", "high",
+         r"(>>?|\btee\b(\s+-a)?|\bsed\s+-i\S*(\s+\S+)*?)\s*['\"]?/etc/hosts\b|\b(echo|printf)\b[^\n]*(>>?|\|\s*(sudo\s+)?tee)[^\n]*/etc/hosts\b",
+         "Edits /etc/hosts, which can silently redirect real domains to an attacker's server."),
+    Rule("NET-DNS-CHANGE", "persistence", "high",
+         r"\bnetworksetup\s+-setdnsservers\b|(>>?|\btee\b(\s+-a)?)\s*['\"]?/etc/resolv\.conf\b|\bsed\s+-i\S*[^\n]*/etc/resolv\.conf\b|\bscutil\s+--set\s+DNS\b|\bresolvectl\s+dns\b",
+         "Changes the system DNS resolvers, which lets the author reroute or spy on every lookup."),
 
     # ---------------------------------------------------------------- obfuscation
     Rule("OBF-B64-EXEC", "obfuscation", "high",
