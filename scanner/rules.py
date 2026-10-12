@@ -31,6 +31,7 @@ JAIL_NOTES = {
     "binary": "a compiled binary that is not on the exec allowlist cannot start; if you allow it, it still gets no network and no credential paths.",
     "permissions": "an over-broad manifest is the one thing the jail trusts you on. Narrow it before approving.",
     "network": "every host has to be in net.allow; raw IPs, link-local and paste/webhook catchers are refused unless you explicitly declare them.",
+    "capture": "whatever the skill reads off the clipboard or the screen still cannot leave the jail: net.allow is the only way out, so a capture with nowhere to send it is inert.",
     "unicode": "hidden text is still text; the jail limits what it can achieve, but read the rendered file carefully before trusting any of it.",
     "zip": "unpack into an empty directory and scan again; the jail would only let the skill touch the workspace anyway.",
 }
@@ -300,6 +301,14 @@ RULES = [
     Rule("ENV-SECRET-REF", "env-harvest", "low",
          r"\$\{?(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|SLACK_(BOT_)?TOKEN|NPM_TOKEN|PYPI_TOKEN|DATABASE_URL|STRIPE_SECRET_KEY|TWILIO_AUTH_TOKEN|SENDGRID_API_KEY|GOOGLE_APPLICATION_CREDENTIALS|AZURE_CLIENT_SECRET|VERCEL_TOKEN|NETLIFY_AUTH_TOKEN|HF_TOKEN|HUGGING_FACE_HUB_TOKEN|DOCKER_PASSWORD|SSH_AUTH_SOCK)\b|(getenv|environ(\.get)?|process\.env)\s*[\[(.]\s*[\"']?(AWS_SECRET_ACCESS_KEY|GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|SLACK_TOKEN|NPM_TOKEN|DATABASE_URL|STRIPE_SECRET_KEY)",
          "Uses a secret from the environment. Expected for the skill's own API, check it only goes to that API's host."),
+
+    # ---------------------------------------------------------------- local capture / surveillance
+    Rule("CAPTURE-CLIPBOARD", "capture", "medium",
+         r"\bpbpaste\b|\bxclip\b[^\n]*\s-o(ut)?\b|\bxsel\b[^\n]*\s-(b|-clipboard)\b|\bwl-paste\b|\bGet-Clipboard\b|\bpyperclip\.paste\s*\(|\bclipboard\.(readText|paste)\s*\(",
+         "Reads the clipboard, which routinely holds a password, token or 2FA code the user just copied."),
+    Rule("CAPTURE-SCREEN", "capture", "medium",
+         r"\bscreencapture\b|\bscrot\b|\bgnome-screenshot\b|\bimport\s+-window\b|\bffmpeg\b[^\n]*\b(avfoundation|x11grab|gdigrab)\b|\[System\.Windows\.Forms\.Screen\]|\.CopyFromScreen\s*\(|\bspectacle\b[^\n]*\s-b\b",
+         "Takes a screenshot or records the screen: silent surveillance of whatever the user is looking at."),
 
     # ---------------------------------------------------------------- privilege
     Rule("PRIV-SUDO", "privilege", "high",
