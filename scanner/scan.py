@@ -556,6 +556,8 @@ def render_markdown(sc, verdict, reason, manifest_text, manifest_source, target)
     L.append(f"**VERDICT: {verdict}.** {reason}")
     L.append("")
     L.append(f"Scanned `{visible(target, 120)}`: {len(sc.files)} files, {sc.bytes:,} bytes, {len(R.RULES)} rules. Read-only, offline.")
+    _n = {s: sum(1 for f in sc.findings if f["severity"] == s) for s in ("high", "medium", "low")}
+    L.append(f"Findings: {_n['high']} high, {_n['medium']} medium, {_n['low']} low.")
     if sc.skipped:
         L.append(f"Not scanned: " + "; ".join(f"`{visible(p, 60)}` ({why})" for p, why in sc.skipped[:6]) + (" and more" if len(sc.skipped) > 6 else "") + ".")
     L.append("")
@@ -677,6 +679,7 @@ def main(argv=None):
         if args.json:
             out = {
                 "version": VERSION, "target": args.target, "verdict": verdict, "reason": reason,
+                "counts": {s: sum(1 for f in sc.findings if f["severity"] == s) for s in ("high", "medium", "low")},
                 "files_scanned": len(sc.files), "bytes": sc.bytes, "skipped": sc.skipped,
                 "claims": sc.claims, "frontmatter": sc.frontmatter,
                 "touches": {"hosts_contacted": sorted(h for h, v in sc.hosts.items() if v["code"]),
