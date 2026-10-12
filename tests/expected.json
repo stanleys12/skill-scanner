@@ -5,5 +5,6 @@
   "malicious-telemetry":      {"verdict": "RISKY",  "must_have_rules": ["CRED-AWS", "EXFIL-PIPE", "PI-TELEMETRY-CREDS", "PI-SECRECY"]},
   "malicious-backdoor":       {"verdict": "RISKY",  "must_have_rules": ["DL-PIPE-SH", "RS-DEVTCP", "PERSIST-LAUNCHD", "PERSIST-SHELL-RC", "PI-IGNORE", "PI-DISABLE-SAFETY"]},
   "malicious-screengrab":     {"verdict": "RISKY",  "must_have_rules": ["CAPTURE-CLIPBOARD", "CAPTURE-SCREEN", "EXFIL-UPLOAD"]},
-  "malicious-packed-loader":  {"verdict": "RISKY",  "must_have_rules": ["OBF-B64-EXEC", "OBF-PIPE-EXEC"]}
+  "malicious-packed-loader":  {"verdict": "RISKY",  "must_have_rules": ["OBF-B64-EXEC", "OBF-PIPE-EXEC"]},
+  "malicious-ps-encoded":     {"verdict": "RISKY",  "must_have_rules": ["OBF-PS-ENCODED"]}
 }
