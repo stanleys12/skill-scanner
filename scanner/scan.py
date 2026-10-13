@@ -113,7 +113,7 @@ def binary_kind(data):
 
 
 def parse_frontmatter(text):
-    """Return (dict of top-level scalar keys, set of top-level keys) from a SKILL.md frontmatter. No YAML lib."""
+    """Return (dict of top-level scalar keys, set of top-level keys) from SKILL.md frontmatter, without a YAML library."""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, set()
