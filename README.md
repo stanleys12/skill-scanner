@@ -38,7 +38,6 @@ stdlib Python 3.11+.
 
 ![A scan catching a malicious skill: it reads the English instructions, not just the code](assets/shot-scan.png)
 
-
 Credential and secret reads, data exfiltration, download-and-run, reverse shells, cloud-metadata
 and SSRF, destructive commands, persistence (shell rc, cron, launchd, git hooks, authorized_keys,
 agent hooks), obfuscation (base64/hex/charcode decode-and-run, zero-width and bidi unicode),
