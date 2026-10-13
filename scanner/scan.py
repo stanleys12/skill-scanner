@@ -251,11 +251,11 @@ def find_skill_md(root):
 class Scanner:
     def __init__(self, root):
         self.root = root
-        self.findings = []          # dicts
+        self.findings = []          # finding dicts, as built in add()
         self.hosts = {}             # host -> {"code": bool, "where": str}
         self.bins = {}              # binary -> where
         self.env = {}               # VAR -> where
-        self.writes = []            # where
+        self.writes = []            # where each write was seen
         self.files = []             # relpaths scanned
         self.skipped = []           # (relpath, reason)
         self.bytes = 0
