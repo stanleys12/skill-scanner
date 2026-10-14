@@ -35,7 +35,7 @@ needs no network.
    `must_have_rules`, `must_not` (severities that must be absent) and `must_contact` (hosts the scan must report contacting) are optional.
 
 4. **Regenerate the rule catalog**: `python3 scripts/gen_rules_doc.py` (updates `docs/RULES.md`,
-   which the suite checks is in sync).
+   which the suite checks is up to date).
 
 5. **Run the suite**: `python3 tests/run_tests.py`. It must exit 0. Existing clean samples
    must stay SAFE, so check that your pattern does not cause false positives.
