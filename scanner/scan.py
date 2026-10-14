@@ -289,7 +289,7 @@ class Scanner:
         self.skill_md = find_skill_md(self.root)
         if not self.skill_md:
             self.add("STRUCT-NO-SKILLMD", "medium", "structure", ".", 0, "(no SKILL.md found)",
-                     "There is no SKILL.md, so there is no stated purpose to judge the code against. Nothing to compare claims to.")
+                     "There is no SKILL.md, so there is no stated purpose to judge the code against.")
         for dp, dn, fn in os.walk(self.root, followlinks=False):
             dn[:] = sorted(d for d in dn if d not in SKIP_DIRS)
             skipped_dirs = [d for d in os.listdir(dp) if os.path.isdir(os.path.join(dp, d)) and d in SKIP_DIRS and d != ".git"]
