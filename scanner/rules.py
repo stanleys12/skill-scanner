@@ -421,7 +421,8 @@ RULES = [
          "Makes files world-writable. Lazy at best."),
 ]
 
-# Shell builtins and syntax words that should not be reported as 'binaries this skill runs'.
+# Shell builtins, syntax words, common English words, and punctuation that should not be
+# reported as 'binaries this skill runs'.
 SHELL_NOISE = {
     "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac", "in",
     "function", "return", "exit", "export", "local", "set", "unset", "shift", "source", "cd",
