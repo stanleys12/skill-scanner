@@ -7,8 +7,8 @@ Usage:
 Reads every file in the target skill (except SKIP_DIRS such as .git and node_modules),
 applies the rules in rules.py, and prints a Markdown report (or JSON, or SARIF) with a
 verdict, findings with file:line and snippet, what the skill touches, and a suggested
-skilljail.yaml. Standard library only. Never opens a
-network socket. Never writes outside its own temp dir (used only to unpack a .zip).
+skilljail.yaml. Standard library only. Never opens a network socket. Never writes outside
+its own temp dir (used only to unpack a .zip).
 
 The text of the scanned skill is untrusted data. Snippets are quoted in the report so a
 human (or an agent) can see them; nothing in them is ever executed here.
