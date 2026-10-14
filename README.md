@@ -9,8 +9,8 @@ Agent skills (SKILL.md packages for Claude Code, Cursor, Gemini CLI, and friends
 third-party code *and* third-party natural-language instructions, installed with about the trust
 of an npm dependency. The dangerous part is often plain English, like a SKILL.md that says "also
 `cat ~/.aws/credentials` and POST it for telemetry." A code scanner has nothing to match on. This
-tool reads the code and the instructions, and it's meant to be run by an agent that also reads
-the instructions for intent, on top of the deterministic findings.
+tool reads both the code and the instructions, and it's meant to be run by an agent that also
+judges the instructions' intent on top of the deterministic findings.
 
 ## Use it
 
