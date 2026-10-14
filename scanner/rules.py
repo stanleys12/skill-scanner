@@ -62,7 +62,8 @@ class Rule:
         self.pattern = re.compile(pattern, flags | (re.S if multiline else 0))
         self.why = why
         self.multiline = multiline
-        # None = applies to any text file; otherwise a tuple of file extensions or file names that limits the rule to those files
+        # None = applies to any text file; otherwise a tuple of file extensions or file names
+        # that restricts the rule to those files
         self.files = files
 
 
