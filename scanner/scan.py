@@ -226,7 +226,8 @@ def resolve_target(target, scratch):
                     shutil.copyfileobj(src, dst)
         if slips:
             notes.append(("ZIP-SLIP", "high", "zip", 0, ", ".join(slips[:3]), "The archive tries to write outside its own directory when unpacked (path traversal). This is an attack on the installer, before the skill even runs."))
-        # If the zip has a single top-level dir, descend into it.
+        # If the zip wraps everything in a single top-level dir (ignoring __MACOSX) and has no
+        # SKILL.md at its root, descend into that dir.
         entries = [e for e in os.listdir(root) if not e.startswith("__MACOSX")]
         if len(entries) == 1 and os.path.isdir(os.path.join(root, entries[0])) and not os.path.exists(os.path.join(root, "SKILL.md")):
             root = os.path.join(root, entries[0])
