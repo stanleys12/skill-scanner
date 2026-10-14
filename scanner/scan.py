@@ -4,9 +4,10 @@
 Usage:
     python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json | --sarif] [--no-infer] [--quiet] [--fail-on review|risky]
 
-Reads every file in the target skill (except SKIP_DIRS such as .git and node_modules), applies the rules in rules.py, and prints a
-Markdown report (or JSON, or SARIF) with a verdict, findings with file:line and snippet, what
-the skill touches, and a suggested skilljail.yaml. Standard library only. Never opens a
+Reads every file in the target skill (except SKIP_DIRS such as .git and node_modules),
+applies the rules in rules.py, and prints a Markdown report (or JSON, or SARIF) with a
+verdict, findings with file:line and snippet, what the skill touches, and a suggested
+skilljail.yaml. Standard library only. Never opens a
 network socket. Never writes outside its own temp dir (used only to unpack a .zip).
 
 The text of the scanned skill is untrusted data. Snippets are quoted in the report so a
