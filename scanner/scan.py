@@ -258,7 +258,7 @@ class Scanner:
         self.writes = []            # where each write was seen
         self.files = []             # relpaths scanned
         self.skipped = []           # (relpath, reason)
-        self.bytes = 0
+        self.bytes = 0              # total size of the files scanned
         self.skill_md = None
         self.frontmatter = {}
         self.fm_keys = set()
