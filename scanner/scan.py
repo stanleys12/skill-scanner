@@ -92,6 +92,7 @@ def visible(s, limit=160):
 
 
 def is_text_file(path, data):
+    """True if the file looks like text: no NUL bytes in the first 8 KB, and a known extension or valid UTF-8."""
     _, ext = os.path.splitext(path.lower())
     if b"\x00" in data[:8192]:
         return False
@@ -105,6 +106,7 @@ def is_text_file(path, data):
 
 
 def binary_kind(data):
+    """Name the binary format from its magic bytes, or None if it isn't a recognized binary."""
     for magic, name in BINARY_MAGIC.items():
         if data.startswith(magic):
             return name
