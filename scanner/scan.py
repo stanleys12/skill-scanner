@@ -273,7 +273,7 @@ class Scanner:
         n = self._counts.get(key, 0)
         self._counts[key] = n + 1
         if n >= MAX_HITS_PER_RULE_PER_FILE:
-            return
+            return  # cap repeat hits so one noisy rule cannot flood the report
         for f in self.findings:
             if f["rule"] == rule_id and f["file"] == rel and f["line"] == line:
                 return
