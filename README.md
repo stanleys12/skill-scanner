@@ -78,8 +78,8 @@ expected verdicts, so you can see what each verdict looks like.
 The scanner is the "before you install" step. SkillJail (free, Apache-2.0,
 [github.com/stanleys12/skilljail](https://github.com/stanleys12/skilljail)) is the "run it anyway,
 safely" step: take the suggested `skilljail.yaml` from the report, drop it next to the skill's
-`SKILL.md`, and launch the skill with `skilljail run`. Anything the scan missed is contained at the kernel, not merely
-detected.
+`SKILL.md`, and launch the skill with `skilljail run`. Anything the scan missed is contained at
+the kernel, not merely detected.
 
 ## License
 
