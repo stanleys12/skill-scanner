@@ -92,7 +92,7 @@ def visible(s, limit=160):
 
 
 def is_text_file(path, data):
-    """True if the file looks like text: no NUL bytes in the first 8 KB, and either a known extension or a first 8 KB that decodes as UTF-8."""
+    """True if the file looks like text: no NUL bytes in the first 8 KB, and either a known text extension or a first 8 KB that decodes as UTF-8."""
     _, ext = os.path.splitext(path.lower())
     if b"\x00" in data[:8192]:
         return False
