@@ -468,7 +468,7 @@ class Scanner:
         if "medium" in sev:
             meds = [f for f in self.findings if f["severity"] == "medium"]
             cats = sorted({f["category"] for f in meds})
-            return "REVIEW", f"{len(meds)} thing{'s' if len(meds) != 1 else ''} worth a human look ({', '.join(cats)}). Probably fine, read them first."
+            return "REVIEW", f"{len(meds)} thing{'s' if len(meds) != 1 else ''} worth a human look ({', '.join(cats)}). Probably fine, but read them first."
         lows = [f for f in self.findings if f["severity"] == "low"]
         if lows:
             return "SAFE", f"Nothing dangerous found. {len(lows)} informational note{'s' if len(lows) != 1 else ''} below."
