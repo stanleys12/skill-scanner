@@ -43,8 +43,8 @@ Credential and secret reads, data exfiltration, download-and-run, reverse shells
 and SSRF, destructive commands, persistence (shell rc, cron, launchd, git hooks, authorized_keys,
 agent hooks), obfuscation (base64/hex/charcode decode-and-run, zero-width and bidi unicode),
 environment harvesting, clipboard and screen capture, privilege escalation, embedded secrets,
-over-broad manifests, and prompt-injection markers in the instructions. 105 rules; every hit carries
-the file, line, and snippet so you can check it yourself.
+over-broad manifests, and prompt-injection markers in the instructions. There are 105 rules, and
+every hit carries the file, line, and snippet so you can check it yourself.
 
 It is not a decompiler and not a sandbox. A compiled binary gets flagged as unreviewable, not
 analyzed. Static rules have blind spots by nature, which is exactly why the suggested manifest and
