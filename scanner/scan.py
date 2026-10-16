@@ -262,7 +262,7 @@ class Scanner:
         self.hosts = {}             # host -> {"code": bool, "where": str}
         self.bins = {}              # binary -> where
         self.env = {}               # VAR -> where
-        self.writes = []            # where each write was seen
+        self.writes = []            # locations where a file write was detected
         self.files = []             # relpaths scanned
         self.skipped = []           # (relpath, reason)
         self.bytes = 0              # total size of the files scanned
