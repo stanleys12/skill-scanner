@@ -437,7 +437,8 @@ SHELL_NOISE = {
     "#", "$", "//", "/*", "*", "-", "--", "...", "|", "||", "&&", ">", ">>", "<", "<<",
 }
 
-# Patterns for things that look like network destinations. Used only for the "what it touches" table; they never produce findings.
+# Patterns for things that look like network destinations. Used only for the "what it
+# touches" table; they never produce findings.
 URL_RE = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,}|(\d{1,3}\.){3}\d{1,3})(:\d+)?", re.I)
 HOST_RE = re.compile(r"\b((?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|me|us|uk|de|fr|ru|cn|xyz|top|site|online|cloud|info|tech|gg|to|ly|tv|cc|ws|biz|is|gd|ee|st|moe|pub|run|lt|fun|live|pro)(?::\d+)?)\b", re.I)
 HOST_SKIP = {"example.com", "example.org", "example.net", "localhost", "schema.org", "w3.org", "www.w3.org",
