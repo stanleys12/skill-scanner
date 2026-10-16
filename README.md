@@ -64,7 +64,7 @@ self-scan; it is `verify.sh` running it jailed with no network and no outside wr
 the thesis in one line: detection has false positives and blind spots, containment does not.
 
 ```bash
-scripts/verify.sh      # jails the scanner, proves no-net + read-only, runs the verdict tests
+scripts/verify.sh      # jails the scanner, proves no network and no outside writes, runs the verdict tests
 python3 tests/run_tests.py   # just the verdict tests (no SkillJail needed)
 scripts/package.sh     # build dist/skill-scanner.zip for upload
 ```
