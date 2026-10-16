@@ -32,7 +32,7 @@ needs no network.
    "malicious-dns-hijack": {"verdict": "RISKY", "must_have_rules": ["YOUR-RULE-ID"]}
    ```
 
-   `must_have_rules`, `must_not` (severities that must be absent) and `must_contact` (hosts the scan must report contacting) are optional.
+   All keys other than `verdict` are optional: `must_have_rules` (rule IDs that must fire), `must_not` (severities that must be absent) and `must_contact` (hosts the scan must report contacting).
 
 4. **Regenerate the rule catalog**: `python3 scripts/gen_rules_doc.py` (updates `docs/RULES.md`,
    which the suite checks is up to date).
