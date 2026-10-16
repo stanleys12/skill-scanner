@@ -63,7 +63,7 @@ class Rule:
         self.why = why
         self.multiline = multiline
         # None = applies to any text file; otherwise a tuple of file extensions or file names
-        # that restricts the rule to those files
+        # that limits the rule to those files.
         self.files = files
 
 
