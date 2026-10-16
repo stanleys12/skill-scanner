@@ -25,8 +25,8 @@ python3 scanner/scan.py <target> --quiet                        # only the one-l
 
 You get a one-line verdict (SAFE / REVIEW / RISKY), a "what it says vs. what it touches" table,
 findings grouped by severity with file:line and the exact snippet, a note on what SkillJail does
-about each high finding, and a suggested `skilljail.yaml`. No install, no dependencies: it's
-stdlib Python 3.11+.
+about each high finding, and a suggested `skilljail.yaml`. No install and no dependencies: it
+needs only the Python 3.11+ standard library.
 
 ### Exit codes
 
