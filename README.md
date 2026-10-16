@@ -32,6 +32,7 @@ stdlib Python 3.11+.
 
 - `0`: scan finished and no `--fail-on` threshold was hit
 - `1`: the verdict is at or above the `--fail-on` level
+- `2`: invalid command-line usage (unknown flag or bad `--fail-on` value)
 - `3`: target error (missing path, unreadable or invalid input)
 
 ## What it catches
