@@ -60,7 +60,7 @@ Scanning the scanner with itself comes back RISKY, and that is correct: its rule
 list of attack signatures and its docs describe the attacks, so a pattern scanner trips over
 both. There is deliberately no way to tell the scanner to skip a file, because a scanner you
 can silence is exactly what an attacker wants. The proof that this tool is safe is not a clean
-self-scan, it is `verify.sh` running it jailed with no network and no outside writes. That is
+self-scan; it is `verify.sh` running it jailed with no network and no outside writes. That is
 the thesis in one line: detection has false positives and blind spots, containment does not.
 
 ```bash
