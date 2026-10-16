@@ -290,7 +290,7 @@ RULES = [
          "Runs a base64-encoded PowerShell command. The command is hidden from anyone reading the file."),
     Rule("OBF-B64-DECODE", "obfuscation", "medium",
          r"base64\s+(-d|--decode|-D)\b|base64\.b64decode\(|\batob\s*\(|Buffer\.from\([^\n]*[\"']base64[\"']|bytes\.fromhex\(|binascii\.unhexlify\(|codecs\.decode\([^\n]*rot",
-         "Decodes an encoded string. Sometimes legit (binary data), often a way to hide a URL or command."),
+         "Decodes an encoded string. Sometimes legitimate (binary data), often a way to hide a URL or command."),
     Rule("OBF-B64-BLOB", "obfuscation", "medium",
          r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{120,}={0,2}(?![A-Za-z0-9+/=])",
          "A very long base64-looking literal. Decode it before trusting the file."),
