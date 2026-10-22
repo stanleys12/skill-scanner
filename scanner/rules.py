@@ -36,7 +36,7 @@ JAIL_NOTES = {
     "zip": "unpack into an empty directory and scan again; the jail would only let the skill touch the workspace anyway.",
 }
 
-# Rough mapping from what a skill does to a SkillJail Pro profile name. Used for one
+# Rough mapping from what a skill does to a SkillJail Pro profile name. Used only for one
 # optional line in the report footer; nothing else depends on it.
 PRO_PROFILE_HINTS = [
     (re.compile(r"\bgit\s+(commit|add|push)\b|\bconventional commit", re.I), "git-commit"),
