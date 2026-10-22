@@ -67,7 +67,7 @@ class Rule:
         self.files = files
 
 
-# Shared regex fragments (home-directory paths, network tools, shells), reused to keep the big table below readable.
+# Shared regex fragments (home-directory paths, network tools, shells), reused in the rule table below to keep its patterns readable.
 HOME = r"(?:~|\$HOME|\$\{HOME\}|/Users/[^/\s'\"]+|/home/[^/\s'\"]+|%USERPROFILE%)"
 NET_TOOL = r"(?:curl|wget|nc|ncat|netcat|socat|http|xh|aria2c|Invoke-WebRequest|iwr)"
 SHELL = r"(?:ba|z|da|k)?sh|bash|zsh|fish"
