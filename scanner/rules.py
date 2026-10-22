@@ -14,7 +14,7 @@ Keep this file boring and reviewable. No network, no imports beyond re.
 
 import re
 
-# What SkillJail does about each category. Shown under each high finding in the report.
+# What SkillJail does about each category. Shown under each high-severity finding in the report.
 JAIL_NOTES = {
     "credentials": "the manifest below does not grant that path, so the read fails at the kernel with Operation not permitted.",
     "exfil": "net.allow is empty for this skill, so the connection is refused at the egress proxy before any byte leaves.",
