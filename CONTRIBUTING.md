@@ -22,8 +22,8 @@ needs no network.
    - Keep `rules.py` boring: no network, no imports beyond `re`.
 
 2. **Add a sample skill under `tests/skills/<name>/`** with a `SKILL.md` (and any scripts) that
-   triggers the rule. Name it `malicious-*`, `borderline-*` or `clean-*`. Make malicious samples
-   defanged: use reserved `.example` hosts and nothing wired to run. If the rule fits an existing
+   triggers the rule. Name it `malicious-*`, `borderline-*` or `clean-*`. Defang malicious samples:
+   use reserved `.example` hosts and wire nothing to run. If the rule fits an existing
    sample, extend that one instead.
 
 3. **Add its entry to `tests/expected.json`**:
