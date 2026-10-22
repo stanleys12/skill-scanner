@@ -72,7 +72,7 @@ class ScanError(Exception):
 
 # --------------------------------------------------------------------------- helpers
 def visible(s, limit=160):
-    """Make a snippet safe to put in a Markdown report: show invisible chars, drop control chars, truncate."""
+    """Make a snippet safe to put in a Markdown report: name invisible chars, show control chars as <0x..> escapes, truncate."""
     out = []
     for ch in s:
         if ch in ZW_NAMES:
