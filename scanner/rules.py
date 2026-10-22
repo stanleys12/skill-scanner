@@ -1,6 +1,6 @@
 """Rule table for the Skill Security Scanner.
 
-Every rule is a compiled regex applied to one line of one file (or, for the few
+Every rule wraps a compiled regex that is applied to one line of one file (or, for the few
 multiline rules, to the whole file). A hit becomes a finding with the file, line,
 exact snippet, a one-sentence reason, and what SkillJail does about it.
 
