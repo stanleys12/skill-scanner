@@ -178,6 +178,7 @@ def yaml_dump(obj, indent=0):
 
 
 def yaml_scalar(v):
+    """Render a scalar for yaml_dump, double-quoting any string that YAML could misread (spaces, reserved words, leading * or -)."""
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, int):
@@ -244,6 +245,7 @@ def resolve_target(target, scratch):
 
 
 def find_skill_md(root):
+    """Return the path to SKILL.md: the one at the root if present, else the first found (any case) in a subdirectory, else None."""
     cand = os.path.join(root, "SKILL.md")
     if os.path.isfile(cand):
         return cand
