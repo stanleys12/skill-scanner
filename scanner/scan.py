@@ -270,9 +270,9 @@ class Scanner:
         self.skill_md = None
         self.frontmatter = {}
         self.fm_keys = set()
-        self.claims = ""
-        self.skill_text = ""
-        self._counts = {}
+        self.claims = ""            # what SKILL.md says it does: its description plus first paragraph
+        self.skill_text = ""        # full text of SKILL.md
+        self._counts = {}           # (rule_id, relpath) -> hits so far, for the per-file cap
 
     # -- recording
     def add(self, rule_id, severity, category, rel, line, snippet, why, source=None):
