@@ -17,7 +17,7 @@ judges the intent of the instructions on top of the deterministic findings.
 ```bash
 python3 scanner/scan.py <skill-dir | SKILL.md | skill.zip>      # Markdown report
 python3 scanner/scan.py <target> --json                         # machine-readable
-python3 scanner/scan.py <target> --sarif                        # SARIF 2.1.0 (code scanning)
+python3 scanner/scan.py <target> --sarif                        # SARIF 2.1.0 (for GitHub code scanning)
 python3 scanner/scan.py <target> --no-infer                     # don't call `skilljail infer`
 python3 scanner/scan.py <target> --fail-on review               # exit 1 for REVIEW or RISKY (CI)
 python3 scanner/scan.py <target> --quiet                        # only the one-line verdict
