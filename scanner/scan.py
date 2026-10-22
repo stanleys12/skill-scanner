@@ -192,7 +192,8 @@ def yaml_scalar(v):
 def resolve_target(target, scratch):
     """Return (skill_root_dir, notes). Unpacks a zip into scratch (a private temp dir).
 
-    notes is a list of findings about the archive itself (zip-slip paths, symlinks), as tuples that Scanner.run records.
+    notes is a list of findings about the archive itself (zip-slip paths, symlinks), each a
+    (rule_id, severity, relpath, line, snippet, why) tuple that Scanner.run records.
     """
     target = os.path.abspath(os.path.expanduser(target))
     notes = []
