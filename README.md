@@ -66,7 +66,7 @@ the thesis in one line: detection has false positives and blind spots, containme
 
 ```bash
 scripts/verify.sh      # jails the scanner, proves no network and no outside writes, runs the verdict tests
-python3 tests/run_tests.py   # just the verdict tests (no SkillJail needed)
+python3 tests/run_tests.py   # runs only the verdict tests (no SkillJail needed)
 scripts/package.sh     # build dist/skill-scanner.zip for upload
 ```
 
