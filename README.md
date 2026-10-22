@@ -47,7 +47,7 @@ over-broad manifests, and prompt-injection markers in the instructions. There ar
 every hit carries the file, line, and snippet so you can check it yourself.
 
 It is not a decompiler and not a sandbox. A compiled binary gets flagged as unreviewable, not
-analyzed. Static rules have blind spots by nature, which is exactly why the suggested manifest and
+analyzed. Static rules inevitably have blind spots, which is exactly why the suggested manifest and
 SkillJail exist: containment doesn't depend on the scan being complete.
 
 ## It's read-only and jailed
