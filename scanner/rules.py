@@ -419,7 +419,7 @@ RULES = [
          files=("SKILL.md",), flags=re.I | re.M),
     Rule("PERM-CHMOD-777", "permissions", "low",
          r"\bchmod\s+(-R\s+)?[0-7]?777\s+(?!/\s)",
-         "Makes files world-writable. Lazy at best."),
+         "Makes files world-writable, so any local user or process can modify them."),
 ]
 
 # Shell builtins, syntax words, common English words, and punctuation that should not be
