@@ -270,7 +270,7 @@ class Scanner:
         self.skill_md = None
         self.frontmatter = {}
         self.fm_keys = set()
-        self.claims = ""            # what SKILL.md says it does: its description plus first paragraph
+        self.claims = ""            # what SKILL.md says it does: its frontmatter description plus its first paragraph
         self.skill_text = ""        # full text of SKILL.md
         self._counts = {}           # (rule_id, relpath) -> hits so far, for the per-file cap
 
