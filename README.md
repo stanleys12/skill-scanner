@@ -70,8 +70,8 @@ python3 tests/run_tests.py   # runs only the verdict tests (no SkillJail needed)
 scripts/package.sh     # build dist/skill-scanner.zip for upload
 ```
 
-The `tests/skills/` directory has sample good, borderline, and (defanged) malicious skills with
-expected verdicts, so you can see what each verdict looks like.
+The `tests/skills/` directory holds sample good, borderline, and (defanged) malicious skills, each
+with an expected verdict, so you can see what each verdict looks like.
 
 ## Run the skill safely afterward
 
