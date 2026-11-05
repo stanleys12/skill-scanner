@@ -3,6 +3,7 @@
 
 Usage:
     python3 scan.py <skill-dir | SKILL.md | skill.zip> [--json | --sarif] [--no-infer] [--quiet] [--fail-on review|risky]
+    python3 scan.py --list-rules | --version
 
 Reads every file in the target skill (skipping the directories listed in SKIP_DIRS, such
 as .git and node_modules), applies the rules in rules.py, and prints a Markdown report
