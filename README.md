@@ -65,9 +65,9 @@ self-scan; it is `verify.sh` running it jailed with no network and no outside wr
 the thesis in one line: detection has false positives and blind spots, containment does not.
 
 ```bash
-scripts/verify.sh      # runs the scanner under SkillJail to prove it gets no network and no outside writes, then runs the verdict tests
-python3 tests/run_tests.py   # runs only the verdict tests (no SkillJail needed)
-scripts/package.sh     # build dist/skill-scanner.zip for upload
+scripts/verify.sh            # run the scanner under SkillJail to prove it gets no network and no outside writes, then run the verdict tests
+python3 tests/run_tests.py   # run only the verdict tests (no SkillJail needed)
+scripts/package.sh           # build dist/skill-scanner.zip for upload
 ```
 
 The `tests/skills/` directory holds sample good, borderline, and (defanged) malicious skills, each
