@@ -269,9 +269,9 @@ class Scanner:
         self.files = []             # relpaths scanned
         self.skipped = []           # (relpath, reason)
         self.bytes = 0              # total size of the files scanned
-        self.skill_md = None
-        self.frontmatter = {}
-        self.fm_keys = set()
+        self.skill_md = None        # absolute path to SKILL.md, or None if the skill has none
+        self.frontmatter = {}       # top-level scalar keys from SKILL.md frontmatter
+        self.fm_keys = set()        # every top-level frontmatter key, scalar or not
         self.claims = ""            # what SKILL.md says it does: its frontmatter description plus its first paragraph
         self.skill_text = ""        # full text of SKILL.md
         self._counts = {}           # (rule_id, relpath) -> hits so far, for the per-file cap
