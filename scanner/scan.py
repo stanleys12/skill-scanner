@@ -266,7 +266,7 @@ class Scanner:
         self.bins = {}              # binary -> where
         self.env = {}               # VAR -> where
         self.writes = []            # locations where a file write was detected
-        self.files = []             # relpaths scanned
+        self.files = []             # paths of scanned files, relative to the skill root
         self.skipped = []           # (relpath, reason)
         self.bytes = 0              # total size of the files scanned
         self.skill_md = None        # absolute path to SKILL.md, or None if the skill has none
