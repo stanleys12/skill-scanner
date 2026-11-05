@@ -523,7 +523,7 @@ class Scanner:
         return "\n".join(comments) + "\n" + yaml_dump(m), "scanner"
 
     def infer_manifest(self):
-        """Use `skilljail infer --json` if available. Returns (yaml_text, source) or None."""
+        """Run `skilljail infer --json` if the skilljail binary is on PATH. Returns (yaml_text, source), or None if it is missing or fails."""
         exe = shutil.which("skilljail")
         if not exe:
             return None
