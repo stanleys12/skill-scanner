@@ -17,7 +17,7 @@ needs no network.
    - `category` should be one that has an entry in `JAIL_NOTES` (add one if you need a new category).
    - `severity` is `high` (verdict RISKY), `medium` (REVIEW) or `low` (informational).
    - The pattern is a regex applied to one line; pass `multiline=True` to match across the whole file,
-     or `files=(...)` to limit it to certain extensions or names. Case-insensitive by default.
+     or `files=(...)` to limit it to certain extensions or names. Patterns are case-insensitive by default.
    - `why` is one sentence a non-expert can act on.
    - Keep `rules.py` boring: no network, no imports beyond `re`.
 
